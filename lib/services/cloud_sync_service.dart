@@ -298,8 +298,8 @@ class CloudSyncService {
     return null;
   }
 
-  /// Fetches all pending payment requests for Admin approval.
-  static Future<List<Map<String, dynamic>>> getPendingPaymentRequests() async {
+  /// Fetches all payment requests for Admin approval history.
+  static Future<List<Map<String, dynamic>>> getAllPaymentRequests() async {
     try {
       final url = Uri.parse(_auth('$_paymentReqUrl.json'));
       final response = await http.get(url).timeout(const Duration(seconds: 5));
@@ -308,7 +308,7 @@ class CloudSyncService {
         if (data != null) {
           final list = <Map<String, dynamic>>[];
           data.forEach((key, val) {
-            if (val is Map<String, dynamic> && val['status'] == 'pending') {
+            if (val is Map<String, dynamic>) {
               list.add(val);
             }
           });

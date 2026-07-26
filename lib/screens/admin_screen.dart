@@ -137,7 +137,7 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _loadAllRequests() async {
     setState(() => _isLoading = true);
     try {
-      final list = await CloudSyncService.getPendingPaymentRequests();
+      final list = await CloudSyncService.getAllPaymentRequests();
       if (mounted) {
         setState(() {
           _allRequests = list;
@@ -241,6 +241,11 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       await CloudSyncService.saveUserState(email, pro: true);
       await TrialService.unlockPro(email, null);
+      
+      final fakeRef = 'MANUAL-${DateTime.now().millisecondsSinceEpoch}';
+      await CloudSyncService.submitPaymentRequest(email: email, refNumber: fakeRef, amount: 0);
+      await CloudSyncService.approvePaymentRequest(fakeRef, email);
+
       if (!mounted) return;
       _manualEmailCtrl.clear();
       TopToast.show(context, '⚡ PRO License Granted to $email!', backgroundColor: const Color(0xFF34A853));
