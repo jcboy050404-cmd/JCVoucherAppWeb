@@ -298,8 +298,8 @@ class CloudSyncService {
     return null;
   }
 
-  /// Fetches all payment requests (pending, approved, rejected) for Admin history.
-  static Future<List<Map<String, dynamic>>> getAllPaymentRequests() async {
+  /// Fetches all pending payment requests for Admin approval.
+  static Future<List<Map<String, dynamic>>> getPendingPaymentRequests() async {
     try {
       final url = Uri.parse(_auth('$_paymentReqUrl.json'));
       final response = await http.get(url).timeout(const Duration(seconds: 5));
@@ -308,7 +308,7 @@ class CloudSyncService {
         if (data != null) {
           final list = <Map<String, dynamic>>[];
           data.forEach((key, val) {
-            if (val is Map<String, dynamic>) {
+            if (val is Map<String, dynamic> && val['status'] == 'pending') {
               list.add(val);
             }
           });
@@ -372,30 +372,6 @@ class CloudSyncService {
     } catch (e) {
       debugPrint('CloudSyncService: Reject payment error: $e');
       return false;
-    }
-  }
-
-  /// Logs a manual PRO grant as an approved record in the payment history list.
-  static Future<void> logManualGrant(String email) async {
-    if (email.isEmpty) return;
-    try {
-      final timestampId = DateTime.now().millisecondsSinceEpoch.toString();
-      final url = Uri.parse(_auth('$_paymentReqUrl/MANUAL_$timestampId.json'));
-      final payload = {
-        'email': email.trim().toLowerCase(),
-        'ref_number': 'MANUAL_$timestampId',
-        'amount': 0.0,
-        'status': 'approved',
-        'submitted_at': DateTime.now().toIso8601String(),
-        'approved_at': DateTime.now().toIso8601String(),
-      };
-      await http.put(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(payload),
-      ).timeout(const Duration(seconds: 4));
-    } catch (e) {
-      debugPrint('CloudSyncService: Log manual grant error: $e');
     }
   }
 

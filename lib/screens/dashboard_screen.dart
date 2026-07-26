@@ -8,6 +8,7 @@ import '../services/voucher_pdf_service.dart';
 import '../services/trial_service.dart';
 import '../services/auth_service.dart';
 import '../services/cloud_sync_service.dart';
+import '../services/force_update_service.dart';
 import '../models/voucher.dart';
 import '../responsive.dart';
 import '../widgets/stat_card.dart';
@@ -52,6 +53,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
     _loadData();
+    // Re-run the force-update check after login. This catches the case where
+    // an admin publishes a new required version while the app is already
+    // backgrounded between launches. The check is fail-open.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ForceUpdateService.checkAndShowIfRequired(context);
+    });
   }
 
   @override
@@ -482,7 +489,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                       ),
                       contentPadding: EdgeInsets.zero,
-                      activeThumbColor: const Color(0xFF00BFFF),
+                      thumbColor: WidgetStateProperty.resolveWith<Color?>(
+                        (states) => states.contains(WidgetState.selected)
+                            ? const Color(0xFF00BFFF)
+                            : null,
+                      ),
                     ),
 
                     const SizedBox(height: 16),

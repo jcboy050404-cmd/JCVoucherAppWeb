@@ -184,21 +184,8 @@ class _AdminScreenState extends State<AdminScreen> {
       await TrialService.unlockPro(email, null);
       if (!mounted) return;
       TopToast.show(context, '✅ Approved & Granted PRO to $email!', backgroundColor: const Color(0xFF34A853));
-      
-      // Update local state immediately for instant feedback
-      setState(() {
-        final reqIdx = _allRequests.indexWhere((r) => r['ref_number'] == refNumber);
-        if (reqIdx != -1) {
-          _allRequests[reqIdx]['status'] = 'approved';
-        }
-        final userIdx = _allUsers.indexWhere((u) => u['email'] == email);
-        if (userIdx != -1) {
-          _allUsers[userIdx]['pro'] = true;
-        }
-      });
-      
-      _loadAllRequests();
-      _loadAllUsers();
+      await _loadAllRequests();
+      await _loadAllUsers();
     }
   }
 
@@ -206,8 +193,8 @@ class _AdminScreenState extends State<AdminScreen> {
     final success = await CloudSyncService.rejectPaymentRequest(refNumber);
     if (success && mounted) {
       TopToast.show(context, 'Rejected request $refNumber', backgroundColor: const Color(0xFFFF5252));
-      _loadAllRequests();
-    _loadAllUsers();
+      await _loadAllRequests();
+      await _loadAllUsers();
     }
   }
 
@@ -254,20 +241,10 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       await CloudSyncService.saveUserState(email, pro: true);
       await TrialService.unlockPro(email, null);
-      await CloudSyncService.logManualGrant(email); // Save history of manual approval
-      
       if (!mounted) return;
       _manualEmailCtrl.clear();
       TopToast.show(context, '⚡ PRO License Granted to $email!', backgroundColor: const Color(0xFF34A853));
-      
-      // Update local state immediately
-      setState(() {
-        final userIdx = _allUsers.indexWhere((u) => u['email'] == email.toLowerCase());
-        if (userIdx != -1) {
-          _allUsers[userIdx]['pro'] = true;
-        }
-      });
-      _loadAllUsers();
+      await _loadAllUsers();
     } catch (e) {
       if (mounted) {
         TopToast.show(context, 'Error: ${e.toString()}', backgroundColor: const Color(0xFFFF5252));

@@ -1147,7 +1147,11 @@ class _VoucherListScreenState extends State<VoucherListScreen>
                           ),
                         ),
                         contentPadding: EdgeInsets.zero,
-                        activeThumbColor: const Color(0xFF00BFFF),
+                        thumbColor: WidgetStateProperty.resolveWith<Color?>(
+                          (states) => states.contains(WidgetState.selected)
+                              ? const Color(0xFF00BFFF)
+                              : null,
+                        ),
                       ),
                     ],
 
