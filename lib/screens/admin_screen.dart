@@ -254,6 +254,8 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       await CloudSyncService.saveUserState(email, pro: true);
       await TrialService.unlockPro(email, null);
+      await CloudSyncService.logManualGrant(email); // Save history of manual approval
+      
       if (!mounted) return;
       _manualEmailCtrl.clear();
       TopToast.show(context, '⚡ PRO License Granted to $email!', backgroundColor: const Color(0xFF34A853));
