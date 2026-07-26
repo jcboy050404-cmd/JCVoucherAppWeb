@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -23,6 +24,7 @@ Future<void> showForceUpdateDialog({
   return showDialog(
     context: context,
     barrierDismissible: false,
+    barrierColor: Colors.black.withValues(alpha: 0.6),
     useRootNavigator: true,
     builder: (ctx) => ForceUpdateDialog(
       latestVersion: latestVersion,
@@ -63,22 +65,30 @@ class ForceUpdateDialog extends StatelessWidget {
       canPop: false,
       child: Dialog(
         backgroundColor: Colors.transparent,
+        elevation: 0,
         insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-        child: Container(
-          padding: const EdgeInsets.all(1.5),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF00BFFF), Color(0xFF7B2FBE)],
-            ),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: const Color(0xFF141428),
-              borderRadius: BorderRadius.circular(23),
-            ),
-            child: Column(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              padding: const EdgeInsets.all(1.5),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF00BFFF).withValues(alpha: 0.5),
+                    const Color(0xFF7B2FBE).withValues(alpha: 0.5),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF141428).withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(23),
+                ),
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
