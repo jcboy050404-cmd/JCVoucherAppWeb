@@ -1,0 +1,174 @@
+  Widget _buildTopTabs() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF14142D),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _currentTabIndex = 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: _currentTabIndex == 0 ? const Color(0xFF34A853) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'Payments & Config',
+                  style: GoogleFonts.poppins(
+                    color: _currentTabIndex == 0 ? Colors.white : Colors.white54,
+                    fontWeight: _currentTabIndex == 0 ? FontWeight.w600 : FontWeight.w500,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _currentTabIndex = 1);
+                if (_allUsers.isEmpty && !_isLoadingUsers) {
+                  _loadAllUsers();
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: _currentTabIndex == 1 ? const Color(0xFF4285F4) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'User Accounts',
+                  style: GoogleFonts.poppins(
+                    color: _currentTabIndex == 1 ? Colors.white : Colors.white54,
+                    fontWeight: _currentTabIndex == 1 ? FontWeight.w600 : FontWeight.w500,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserAccountsView() {
+    if (_isLoadingUsers) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Center(
+          child: SpinKitThreeBounce(color: Color(0xFF4285F4), size: 28),
+        ),
+      );
+    }
+    if (_allUsers.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Center(
+          child: Text('No users found', style: GoogleFonts.poppins(color: Colors.white54)),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _allUsers.length,
+      itemBuilder: (context, index) {
+        final user = _allUsers[index];
+        final email = user['email'] as String? ?? 'No Email';
+        final name = user['display_name'] as String? ?? '';
+        final isPro = user['pro'] == true;
+        final isTrial = user['trial_used'] == true;
+        final isAdmin = user['is_admin'] == true;
+        final lastLogin = user['last_login_at'] as String? ?? '';
+        final displayName = name.isNotEmpty ? name : email.split('@').first;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF14142D),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isAdmin ? const Color(0xFF9C27B0).withValues(alpha: 0.3) :
+                     isPro ? const Color(0xFF34A853).withValues(alpha: 0.3) :
+                     Colors.white.withValues(alpha: 0.05),
+            ),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: isAdmin ? const Color(0xFF9C27B0).withValues(alpha: 0.2) :
+                                 isPro ? const Color(0xFF34A853).withValues(alpha: 0.2) :
+                                 Colors.white.withValues(alpha: 0.05),
+                child: Text(
+                  displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                  style: GoogleFonts.poppins(
+                    color: isAdmin ? const Color(0xFFE1BEE7) :
+                           isPro ? const Color(0xFFA5D6A7) :
+                           Colors.white70,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      email,
+                      style: GoogleFonts.poppins(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      lastLogin.isNotEmpty ? 'Last Login: $lastLogin.split('T').first' : 'Unknown',
+                      style: GoogleFonts.poppins(color: Colors.white54, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (isAdmin)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      margin: const EdgeInsets.only(bottom: 4),
+                      decoration: BoxDecoration(color: const Color(0xFF9C27B0).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                      child: Text('ADMIN ??', style: GoogleFonts.poppins(color: const Color(0xFFE1BEE7), fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  if (isPro && !isAdmin)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      margin: const EdgeInsets.only(bottom: 4),
+                      decoration: BoxDecoration(color: const Color(0xFF34A853).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                      child: Text('PRO ?', style: GoogleFonts.poppins(color: const Color(0xFFA5D6A7), fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  if (!isPro && !isAdmin)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(color: isTrial ? const Color(0xFFFF9800).withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                      child: Text(isTrial ? 'Trial Used' : 'Free/Trial', style: GoogleFonts.poppins(color: isTrial ? const Color(0xFFFFB74D) : Colors.white70, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }

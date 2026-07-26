@@ -1,0 +1,93 @@
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Admin Banner
+                            _buildAdminBanner(currentUser?.email),
+                            const SizedBox(height: 16),
+
+                            // Top Tabs
+                            _buildTopTabs(),
+                            const SizedBox(height: 16),
+
+                            if (_currentTabIndex == 0) ...[
+                              // Stats Dashboard
+                              _buildStatsRow(),
+                              const SizedBox(height: 20),
+
+                              // Two-column on wide screens, stacked on phones
+                              if (isWide)
+                                IntrinsicHeight(
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Expanded(
+                                          child: _buildGCashSettingsCard()),
+                                      const SizedBox(width: 18),
+                                      Expanded(
+                                          child: _buildManualGrantCard()),
+                                    ],
+                                  ),
+                                )
+                              else ...[
+                                _buildGCashSettingsCard(),
+                                const SizedBox(height: 20),
+                                _buildManualGrantCard(),
+                              ],
+                              const SizedBox(height: 24),
+
+                              // Requests Section Header & Tabs
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Payment Requests',
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF00BFFF)
+                                          .withValues(alpha: 0.15),
+                                      borderRadius:
+                                          BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      '${_filteredRequests.length} Item(s)',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
+                              // Filter Tabs
+                              _buildFilterTabs(),
+                              const SizedBox(height: 12),
+
+                              // Search Input
+                              _buildSearchInput(),
+                              const SizedBox(height: 16),
+
+                              // Requests List
+                              if (_filteredRequests.isEmpty)
+                                _buildEmptyState()
+                              else
+                                ListView.builder(
+                                  shrinkWrap: true,
+                                  physics:
+                                      const NeverScrollableScrollPhysics(),
+                                  itemCount: _filteredRequests.length,
+                                  itemBuilder: (context, idx) {
+                                    return _buildRequestCard(
+                                        _filteredRequests[idx]);
+                                  },
+                                ),
+                            ] else ...[
+                              _buildUserAccountsView(),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  );

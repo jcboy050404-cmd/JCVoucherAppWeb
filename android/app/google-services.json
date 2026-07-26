@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "623293261383",
+    "firebase_url": "https://jc-voucher-app-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "jc-voucher-app",
+    "storage_bucket": "jc-voucher-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:623293261383:android:dee10b4971c607b28e7362",
+        "android_client_info": {
+          "package_name": "com.jc.voucherapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "623293261383-qv5ohcshv17jbsdr7bcr9e45ecd4k227.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.jc.voucherapp",
+            "certificate_hash": "aa495b1b4efc727e694a7c462ff9c83c30d5f822"
+          }
+        },
+        {
+          "client_id": "623293261383-ppao16s126di8qslqhc5pd8acg4ft5uh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyC0xlcIXMFDkjJ6fmr0UWSu7bF4vmLpA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "623293261383-ppao16s126di8qslqhc5pd8acg4ft5uh.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
