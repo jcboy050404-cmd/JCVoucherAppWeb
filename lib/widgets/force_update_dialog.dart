@@ -201,6 +201,8 @@ class ForceUpdateDialog extends StatelessWidget {
           ),
         ),
       ),
+      ),
+      ),
     );
   }
 }
