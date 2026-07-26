@@ -16,12 +16,14 @@ class GCashPaymentModal extends StatefulWidget {
   final Map<String, String>? gcashConfig;
   final MikrotikService? service;
   final VoidCallback onSuccess;
+  final String initialPlan;
 
   const GCashPaymentModal({
     super.key,
     required this.gcashConfig,
     required this.service,
     required this.onSuccess,
+    this.initialPlan = 'monthly',
   });
 
   @override
@@ -34,10 +36,12 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
   Map<String, dynamic>? _userPendingReq;
   bool _isCheckingPendingReq = false;
   Uint8List? _qrBytes;
+  late String _selectedPlan;
 
   @override
   void initState() {
     super.initState();
+    _selectedPlan = widget.initialPlan;
     _checkUserGCashPaymentStatus();
     
     final qrUrl = widget.gcashConfig?['qr_image_url'] ?? '';
@@ -116,13 +120,16 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
 
     setState(() => _isSubmittingGCash = true);
     try {
-      final priceStr = widget.gcashConfig?['pro_price'] ?? '1';
+      final priceStr = _selectedPlan == 'monthly' 
+          ? (widget.gcashConfig?['monthly_price'] ?? '150') 
+          : (widget.gcashConfig?['pro_price'] ?? '1');
       final amount = double.tryParse(priceStr) ?? 1.00;
 
       final success = await CloudSyncService.submitPaymentRequest(
         email: email,
         refNumber: refNo,
         amount: amount,
+        plan: _selectedPlan,
       );
 
       if (!mounted) return;
@@ -151,7 +158,7 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
 
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xFF0A0A14),
+        color: Color(0xFF1A0E2E), // Deep Purple Background
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
@@ -179,14 +186,24 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF34A853).withValues(alpha: 0.2),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                     borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF9800).withValues(alpha: 0.3),
+                        blurRadius: 8,
+                      ),
+                    ],
                   ),
                   child: const Icon(
                     Icons.qr_code_2_rounded,
-                    color: Color(0xFF34A853),
+                    color: Colors.white,
                     size: 22,
                   ),
                 ),
@@ -207,7 +224,7 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
                         '0% Transaction Fee • Admin Approval',
                         style: GoogleFonts.poppins(
                           fontSize: 11,
-                          color: const Color(0xFF34A853),
+                          color: const Color(0xFFFF9800),
                         ),
                       ),
                     ],
@@ -332,7 +349,7 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
                         ),
                       ),
                       style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF00BFFF),
+                        foregroundColor: const Color(0xFFFF9800),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       ),
                     ),
@@ -346,15 +363,15 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF34A853).withValues(alpha: 0.12),
+                  color: const Color(0xFFFF9800).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: const Color(0xFF34A853).withValues(alpha: 0.4),
+                    color: const Color(0xFFFF9800).withValues(alpha: 0.4),
                   ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.phone_android_rounded, color: Color(0xFF34A853), size: 22),
+                    const Icon(Icons.phone_android_rounded, color: Color(0xFFFF9800), size: 22),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -373,7 +390,7 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
                             Text(
                               'GCash #: $gcashNum',
                               style: GoogleFonts.poppins(
-                                color: const Color(0xFF00BFFF),
+                                color: const Color(0xFFFF9800),
                                 fontWeight: FontWeight.w700,
                                 fontSize: 13,
                               ),
@@ -383,10 +400,10 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
                     ),
                     if (gcashNum.isNotEmpty)
                       IconButton(
-                        icon: const Icon(Icons.copy_rounded, color: Color(0xFF00BFFF), size: 18),
+                        icon: const Icon(Icons.copy_rounded, color: Color(0xFFFF9800), size: 18),
                         onPressed: () {
                           Clipboard.setData(ClipboardData(text: gcashNum));
-                          TopToast.show(context, 'Copied GCash Number: $gcashNum', backgroundColor: const Color(0xFF00BFFF));
+                          TopToast.show(context, 'Copied GCash Number: $gcashNum', backgroundColor: const Color(0xFFFF9800));
                         },
                         tooltip: 'Copy Number',
                       ),
@@ -395,8 +412,40 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
               ),
             ],
 
+            const SizedBox(height: 12),
             Text(
-              '1. Scan or send PHP ${cfg['pro_price']?.isNotEmpty == true ? cfg['pro_price'] : '1.00'} to GCash.\n2. Enter the 13-digit Reference Number below:',
+              'Select Plan',
+              style: GoogleFonts.poppins(
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: _PlanOption(
+                    title: 'Monthly',
+                    price: 'PHP ${cfg['monthly_price']?.isNotEmpty == true ? cfg['monthly_price'] : '150.00'}',
+                    isSelected: _selectedPlan == 'monthly',
+                    onTap: () => setState(() => _selectedPlan = 'monthly'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _PlanOption(
+                    title: 'Lifetime PRO',
+                    price: 'PHP ${cfg['pro_price']?.isNotEmpty == true ? cfg['pro_price'] : '1.00'}',
+                    isSelected: _selectedPlan == 'lifetime',
+                    onTap: () => setState(() => _selectedPlan = 'lifetime'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '1. Send the selected amount to GCash.\n2. Enter the 13-digit Reference Number below:',
               style: GoogleFonts.poppins(
                 fontSize: 11.5,
                 color: Colors.white70,
@@ -416,7 +465,7 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
               decoration: InputDecoration(
                 hintText: 'e.g. 100293847561',
                 hintStyle: GoogleFonts.poppins(color: Colors.white30, fontSize: 12.5),
-                prefixIcon: const Icon(Icons.receipt_long_rounded, color: Color(0xFF34A853), size: 18),
+                prefixIcon: const Icon(Icons.receipt_long_rounded, color: Color(0xFFFF9800), size: 18),
                 fillColor: Colors.black.withValues(alpha: 0.3),
                 filled: true,
                 isDense: true,
@@ -424,42 +473,120 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
-                    color: const Color(0xFF34A853).withValues(alpha: 0.3),
+                    color: const Color(0xFFFF9800).withValues(alpha: 0.3),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFFF9800),
+                    width: 1.5,
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
             SizedBox(
               width: double.infinity,
-              height: 44,
-              child: ElevatedButton.icon(
-                onPressed: _isSubmittingGCash ? null : _submitGCashReference,
-                icon: _isSubmittingGCash
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.send_rounded, color: Colors.white, size: 16),
-                label: Text(
-                  'Submit for Admin Approval',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+              height: 46,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF9800).withValues(alpha: 0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF34A853),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                child: ElevatedButton.icon(
+                  onPressed: _isSubmittingGCash ? null : _submitGCashReference,
+                  icon: _isSubmittingGCash
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.send_rounded, color: Colors.white, size: 16),
+                  label: Text(
+                    'Submit for Admin Approval',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanOption extends StatelessWidget {
+  final String title;
+  final String price;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _PlanOption({
+    required this.title,
+    required this.price,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFF9800).withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFFF9800) : Colors.white24,
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? const Color(0xFFFF9800) : Colors.white70,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              price,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                color: Colors.white,
+              ),
+            ),
           ],
         ),
       ),

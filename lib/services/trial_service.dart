@@ -17,6 +17,7 @@ import 'cloud_sync_service.dart';
 class TrialService {
   static const String _trialPrefix = 'trial_generated_';
   static const String _proPrefix = 'pro_unlocked_';
+  static const String _proExpiresPrefix = 'pro_expires_';
   static const String _legacyGlobalProKey = 'is_app_pro_unlocked';
 
   /// Helper to get current user's email if not provided
@@ -45,7 +46,22 @@ class TrialService {
 
     // 1. Check local per-user storage
     final localPro = prefs.getBool('$_proPrefix$userEmail') ?? false;
-    if (localPro) return true;
+    if (localPro) {
+      final expStr = prefs.getString('$_proExpiresPrefix$userEmail');
+      if (expStr != null && expStr.isNotEmpty) {
+        final expDate = DateTime.tryParse(expStr);
+        if (expDate != null && DateTime.now().isAfter(expDate)) {
+          await prefs.remove('$_proPrefix$userEmail');
+          await prefs.remove('$_proExpiresPrefix$userEmail');
+          if (service != null && service.isConnected) {
+            await service.removeRouterProFlag(userEmail);
+          }
+          await CloudSyncService.saveUserState(userEmail, pro: false, proExpiresAt: '');
+          return false;
+        }
+      }
+      return true;
+    }
 
     // 2. Check MikroTik Router for this specific email
     if (service != null && service.isConnected) {
@@ -60,6 +76,23 @@ class TrialService {
     // 3. Check Cloud Database for this specific email
     final cloudData = await CloudSyncService.getUserState(userEmail);
     if (cloudData['pro'] == true) {
+      final expStr = cloudData['pro_expires_at'] as String?;
+      if (expStr != null && expStr.isNotEmpty) {
+        final expDate = DateTime.tryParse(expStr);
+        if (expDate != null && DateTime.now().isAfter(expDate)) {
+          await prefs.remove('$_proPrefix$userEmail');
+          await prefs.remove('$_proExpiresPrefix$userEmail');
+          if (service != null && service.isConnected) {
+            await service.removeRouterProFlag(userEmail);
+          }
+          await CloudSyncService.saveUserState(userEmail, pro: false, proExpiresAt: '');
+          return false;
+        }
+        await prefs.setString('$_proExpiresPrefix$userEmail', expStr);
+      } else {
+        await prefs.remove('$_proExpiresPrefix$userEmail');
+      }
+
       await prefs.setBool('$_proPrefix$userEmail', true);
       if (service != null && service.isConnected) {
         await service.setRouterProFlag(userEmail);
@@ -155,6 +188,7 @@ class TrialService {
     if (userEmail.isNotEmpty) {
       await prefs.remove('$_trialPrefix$userEmail');
       await prefs.remove('$_proPrefix$userEmail');
+      await prefs.remove('$_proExpiresPrefix$userEmail');
     }
     await prefs.remove(_legacyGlobalProKey);
   }

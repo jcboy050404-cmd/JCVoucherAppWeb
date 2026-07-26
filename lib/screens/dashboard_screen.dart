@@ -1060,10 +1060,47 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget build(BuildContext context) {
     final currentUser = AuthService.instance.currentUser;
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadData,
+      backgroundColor: const Color(0xFF050510),
+      body: Stack(
+        children: [
+          // Background glowing orbs
+          Positioned(
+            top: -100,
+            left: -80,
+            child: Container(
+              width: 320,
+              height: 320,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF00BFFF).withValues(alpha: 0.15),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -100,
+            right: -80,
+            child: Container(
+              width: 380,
+              height: 380,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF7B2FBE).withValues(alpha: 0.15),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: _loadData,
           color: const Color(0xFF00BFFF),
           backgroundColor: const Color(0xFF1A1A2E),
           child: CustomScrollView(
@@ -1581,6 +1618,8 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           ),
         ),
+      ),
+        ],
       ),
 
       // FAB — hidden in trial mode

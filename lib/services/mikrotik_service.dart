@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -1385,6 +1385,31 @@ class MikrotikService {
           '=comment=va_pro_$hash',
         ]);
         await _readResponse();
+      } catch (_) {}
+    });
+  }
+
+  /// Removes a PRO script flag (`va_pro_$hash`) from the connected MikroTik router.
+  Future<void> removeRouterProFlag(String email) async {
+    return _execute(() async {
+      try {
+        final hash = _emailHash(email);
+        final targetName = 'va_pro_$hash';
+        _send(['/system/script/print']);
+        final response = await _readResponse();
+        for (final sentence in response) {
+          if (sentence.isNotEmpty && sentence[0] == '!re') {
+            final data = _parseWords(sentence);
+            if (data['name'] == targetName) {
+              final id = data['.id'];
+              if (id != null) {
+                _send(['/system/script/remove', '=.id=$id']);
+                await _readResponse();
+              }
+              break;
+            }
+          }
+        }
       } catch (_) {}
     });
   }

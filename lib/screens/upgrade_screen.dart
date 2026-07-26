@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
@@ -6,9 +6,6 @@ import '../services/mikrotik_service.dart';
 import '../services/cloud_sync_service.dart';
 import 'admin_screen.dart';
 import '../widgets/gcash_payment_modal.dart';
-
-
-
 
 class UpgradeScreen extends StatefulWidget {
   final MikrotikService? service;
@@ -25,11 +22,8 @@ class _UpgradeScreenState extends State<UpgradeScreen>
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
 
-
-
-
-
   Map<String, String>? _gcashConfig;
+  bool _isMonthly = true;
 
   @override
   void initState() {
@@ -48,7 +42,6 @@ class _UpgradeScreenState extends State<UpgradeScreen>
     )..forward();
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
 
-
     _loadGCashSettings();
   }
 
@@ -59,12 +52,10 @@ class _UpgradeScreenState extends State<UpgradeScreen>
 
   @override
   void dispose() {
-
     _pulseCtrl.dispose();
     _fadeCtrl.dispose();
     super.dispose();
   }
-
 
   void _openAdminApprovalPanel() {
     Navigator.push(
@@ -73,7 +64,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
     );
   }
 
-  void _showPurchaseModal() {
+  void _showPurchaseModal(String plan) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -82,6 +73,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
         onSuccess: _showSuccessDialog,
         gcashConfig: _gcashConfig,
         service: widget.service,
+        initialPlan: plan,
       ),
     );
   }
@@ -96,14 +88,16 @@ class _UpgradeScreenState extends State<UpgradeScreen>
           padding: const EdgeInsets.all(1.5),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF00BFFF), Color(0xFF7B2FBE)],
+              colors: [Color(0xFFFF9800), Color(0xFFFF5252), Color(0xFFBB86FC)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(24),
           ),
           child: Container(
             padding: const EdgeInsets.all(28),
             decoration: BoxDecoration(
-              color: const Color(0xFF141428),
+              color: const Color(0xFF1A0E2E),
               borderRadius: BorderRadius.circular(23),
             ),
             child: Column(
@@ -114,12 +108,14 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                   height: 72,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF00BFFF), Color(0xFF7B2FBE)],
+                      colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF00BFFF).withValues(alpha: 0.4),
+                        color: const Color(0xFFFF9800).withValues(alpha: 0.4),
                         blurRadius: 20,
                       ),
                     ],
@@ -128,7 +124,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'You\'re Pro! Ã°Å¸Å½â€°',
+                  'You\'re Pro! 🎉',
                   style: GoogleFonts.poppins(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -166,7 +162,9 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                     child: Ink(
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF00BFFF), Color(0xFF7B2FBE)],
+                          colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -174,7 +172,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                         alignment: Alignment.center,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         child: Text(
-                          'Let\'s Go! Ã¢â€ â€™',
+                          'Let\'s Go! →',
                           style: GoogleFonts.poppins(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -195,41 +193,51 @@ class _UpgradeScreenState extends State<UpgradeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final monthlyPrice = _gcashConfig?['monthly_price']?.isNotEmpty == true ? _gcashConfig!['monthly_price']! : '150';
+    final lifetimePrice = _gcashConfig?['pro_price']?.isNotEmpty == true ? _gcashConfig!['pro_price']! : '299';
+    final currentPrice = _isMonthly ? monthlyPrice : lifetimePrice;
+    
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
+      backgroundColor: const Color(0xFF0E0518),
       body: Stack(
         children: [
-          // Background glow orbs
-          Positioned(
-            top: -80,
-            left: -60,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFFFF9800).withValues(alpha: 0.15),
-                    Colors.transparent,
-                  ],
+          // Background glowing orbs
+          AnimatedBuilder(
+            animation: _pulseAnim,
+            builder: (context, child) => Positioned(
+              top: -100,
+              left: -80,
+              child: Container(
+                width: 320,
+                height: 320,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFFFF9800).withValues(alpha: 0.20 * _pulseAnim.value),
+                      Colors.transparent,
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-          Positioned(
-            bottom: -60,
-            right: -80,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFF7B2FBE).withValues(alpha: 0.2),
-                    Colors.transparent,
-                  ],
+          AnimatedBuilder(
+            animation: _pulseAnim,
+            builder: (context, child) => Positioned(
+              bottom: -100,
+              right: -80,
+              child: Container(
+                width: 380,
+                height: 380,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFFFF5252).withValues(alpha: 0.15 * _pulseAnim.value),
+                      Colors.transparent,
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -241,226 +249,269 @@ class _UpgradeScreenState extends State<UpgradeScreen>
               child: Column(
                 children: [
                   // Back button
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      padding: const EdgeInsets.all(16),
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
                     ),
                   ),
-
+                  
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      physics: const BouncingScrollPhysics(),
                       child: Column(
                         children: [
-                          const SizedBox(height: 16),
-
-                          // Hero icon with pulse glow
-                          AnimatedBuilder(
-                            animation: _pulseAnim,
-                            builder: (context, child) => Container(
-                              width: 110,
-                              height: 110,
+                          _buildToggle(),
+                          if (!_isMonthly)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8, bottom: 8),
+                              child: Text(
+                                'Pay once, enjoy forever',
+                                style: GoogleFonts.poppins(
+                                  color: const Color(0xFFFF9800),
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          if (_isMonthly) const SizedBox(height: 16),
+                          
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFF9800), Color(0xFFFF5252), Color(0xFFBB86FC)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(30),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFF9800).withValues(alpha: 0.2),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.all(28),
                               decoration: BoxDecoration(
+                                color: const Color(0xFF1A0E2E),
                                 borderRadius: BorderRadius.circular(28),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFFFF9800).withValues(alpha: _pulseAnim.value * 0.5),
-                                    blurRadius: 40,
-                                    spreadRadius: 4,
-                                  ),
-                                ],
                               ),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(28),
-                                ),
-                                child: const Icon(
-                                  Icons.workspace_premium_rounded,
-                                  size: 54,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 28),
-
-                          // Title
-                          Text(
-                            'Upgrade to Pro',
-                            style: GoogleFonts.poppins(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          ShaderMask(
-                            shaderCallback: (bounds) => const LinearGradient(
-                              colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
-                            ).createShader(bounds),
-                            child: Text(
-                              'Unlimited Access Ã¢â‚¬Â¢ Forever',
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 32),
-
-                          // Feature cards
-                          _buildFeatureRow(
-                            Icons.all_inclusive_rounded,
-                            'Unlimited Vouchers',
-                            'Generate as many hotspot vouchers as you need',
-                            const Color(0xFF00BFFF),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildFeatureRow(
-                            Icons.print_rounded,
-                            'Full Print Access',
-                            'Print and share voucher batches anytime',
-                            const Color(0xFF7B2FBE),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildFeatureRow(
-                            Icons.bolt_rounded,
-                            'One-Time Payment',
-                            'Pay once, use forever Ã¢â‚¬â€ no subscriptions',
-                            const Color(0xFFFF9800),
-                          ),
-
-                          const SizedBox(height: 32),
-
-
-
-                          if (_gcashConfig != null &&
-                              (_gcashConfig!['gcash_number']?.isNotEmpty == true ||
-                               _gcashConfig!['account_name']?.isNotEmpty == true ||
-                               _gcashConfig!['qr_image_url']?.isNotEmpty == true)) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                              margin: const EdgeInsets.only(bottom: 32),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1A1A2E),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: const Color(0xFFFF9800).withValues(alpha: 0.12),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'PHP ${_gcashConfig!['pro_price']?.isNotEmpty == true ? _gcashConfig!['pro_price'] : '1.00'}',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 36,
-                                        fontWeight: FontWeight.w900,
-                                        color: Colors.white,
-                                        letterSpacing: -1,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFF9800).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: const Color(0xFFFF9800).withValues(alpha: 0.3),
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'one-time',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 12,
-                                            color: Colors.white38,
-                                          ),
-                                        ),
-                                        Text(
-                                          'via GCash',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: const Color(0xFF00BFFF),
+                                    child: Text(
+                                      'RECOMMENDED',
+                                      style: GoogleFonts.poppins(
+                                        color: const Color(0xFFFF9800),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  RichText(
+                                    text: TextSpan(
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: -0.5,
+                                      ),
+                                      children: const [
+                                        TextSpan(text: 'Voucher App '),
+                                        TextSpan(
+                                          text: 'PRO',
+                                          style: TextStyle(
+                                            color: Color(0xFFFF9800),
                                           ),
                                         ),
                                       ],
                                     ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'Unlock the full potential of your hotspot business with advanced voucher tools.',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white.withValues(alpha: 0.7),
+                                      fontSize: 14,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                  
+                                  const SizedBox(height: 28),
+                                  
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '₱$currentPrice',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 44,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                          height: 1,
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 6, left: 6),
+                                        child: Text(
+                                          _isMonthly ? '/mo' : ' one-time',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 16,
+                                            color: Colors.white.withValues(alpha: 0.5),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_isMonthly)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        'for 30 days, auto-expires after',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 13,
+                                          color: Colors.white.withValues(alpha: 0.5),
+                                        ),
+                                      ),
+                                    ),
+                                  const SizedBox(height: 32),
+                                  
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(16),
+                                        gradient: const LinearGradient(
+                                          colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFFFF9800).withValues(alpha: 0.3),
+                                            blurRadius: 15,
+                                            offset: const Offset(0, 5),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ElevatedButton(
+                                        onPressed: () => _showPurchaseModal(_isMonthly ? 'monthly' : 'lifetime'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.transparent,
+                                          shadowColor: Colors.transparent,
+                                          padding: const EdgeInsets.symmetric(vertical: 18),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(16),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Get Voucher App PRO',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  
+                                  const SizedBox(height: 36),
+                                  
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                          borderRadius: BorderRadius.circular(8),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFFFF9800).withValues(alpha: 0.4),
+                                              blurRadius: 8,
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(Icons.star_rounded, color: Colors.white, size: 16),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'PRO Features',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 24),
+                                  _buildCheckFeature(
+                                    'Unlimited Vouchers',
+                                    'Generate as many hotspot vouchers as you need without any limits or restrictions',
+                                  ),
+                                  _buildCheckFeature(
+                                    'Full Print Access',
+                                    'Print and share voucher batches anytime directly from your phone to Bluetooth printers',
+                                  ),
+                                  
+                                  // Admin Approval Panel
+                                  if (AuthService.isAdmin(AuthService.instance.currentUser?.email)) ...[
+                                    const SizedBox(height: 16),
+                                    const Divider(color: Colors.white12, height: 1),
+                                    const SizedBox(height: 20),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: _openAdminApprovalPanel,
+                                        icon: const Icon(Icons.admin_panel_settings_rounded,
+                                            color: Color(0xFFBB86FC), size: 18),
+                                        label: Text(
+                                          'Admin Panel (Approve Payments)',
+                                          style: GoogleFonts.poppins(
+                                            color: const Color(0xFFBB86FC),
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          side: const BorderSide(color: Color(0xFFBB86FC)),
+                                          padding: const EdgeInsets.symmetric(vertical: 14),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(16),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ],
-                                ),
-                              ),
-                            ),
-                          ],
-
-                          // Purchase Button
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: _showPurchaseModal,
-                              icon: const Icon(Icons.shopping_cart_checkout_rounded, color: Colors.white, size: 22),
-                              label: Text(
-                                'Purchase Now',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF34A853),
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                elevation: 8,
-                                shadowColor: const Color(0xFF34A853).withValues(alpha: 0.4),
+                                ],
                               ),
                             ),
                           ),
-                          const SizedBox(height: 20),
-                          // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ADMIN TOOL: Admin Approval Panel (Admin Only) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-                          if (AuthService.isAdmin(AuthService.instance.currentUser?.email)) ...[
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: _openAdminApprovalPanel,
-                                icon: const Icon(Icons.verified_user_rounded,
-                                    color: Color(0xFF34A853), size: 18),
-                                label: Text(
-                                  'Ã°Å¸â€ºÂ¡Ã¯Â¸Â Admin Approval Panel (Approve Payments)',
-                                  style: GoogleFonts.poppins(
-                                    color: const Color(0xFF34A853),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12.5,
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                      color: Color(0xFF34A853), width: 1.2),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  backgroundColor:
-                                      const Color(0xFF34A853).withValues(alpha: 0.08),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                          ],                          const SizedBox(height: 16),
+                          const SizedBox(height: 24),
                         ],
                       ),
                     ),
@@ -469,36 +520,114 @@ class _UpgradeScreenState extends State<UpgradeScreen>
               ),
             ),
           ),
-
         ],
       ),
     );
   }
 
-  Widget _buildFeatureRow(
-    IconData icon,
-    String title,
-    String subtitle,
-    Color color,
-  ) {
+  Widget _buildToggle() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFF161626),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
+        color: const Color(0xFF1A0E2E),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Row(
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withValues(alpha: 0.3)),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _isMonthly = true),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: _isMonthly
+                      ? const LinearGradient(
+                          colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: !_isMonthly ? Colors.transparent : null,
+                  borderRadius: BorderRadius.circular(26),
+                  boxShadow: _isMonthly
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFFFF9800).withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          )
+                        ]
+                      : [],
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'Monthly',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    color: _isMonthly ? Colors.white : Colors.white.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
             ),
-            child: Icon(icon, color: color, size: 20),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _isMonthly = false),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: !_isMonthly
+                      ? const LinearGradient(
+                          colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: _isMonthly ? Colors.transparent : null,
+                  borderRadius: BorderRadius.circular(26),
+                  boxShadow: !_isMonthly
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFFFF9800).withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          )
+                        ]
+                      : [],
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'Lifetime',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    color: !_isMonthly ? Colors.white : Colors.white.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCheckFeature(String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF9800).withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check_rounded, color: Color(0xFFFF9800), size: 16),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -508,26 +637,25 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                 Text(
                   title,
                   style: GoogleFonts.poppins(
-                    fontSize: 13,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: Colors.white,
                   ),
                 ),
+                const SizedBox(height: 4),
                 Text(
                   subtitle,
                   style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: Colors.white38,
-                    height: 1.4,
+                    fontSize: 13,
+                    color: Colors.white.withValues(alpha: 0.6),
+                    height: 1.5,
                   ),
                 ),
               ],
             ),
           ),
-          Icon(Icons.check_circle_rounded, color: color, size: 18),
         ],
       ),
     );
   }
 }
-

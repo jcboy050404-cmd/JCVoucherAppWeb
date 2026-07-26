@@ -120,8 +120,8 @@ class CloudSyncService {
   }
 
   /// Fetches cloud licensing state for [email].
-  /// Returns a map containing {'pro': bool, 'trial_used': bool}.
-  static Future<Map<String, bool>> getUserState(String email) async {
+  /// Returns a map containing {'pro': bool, 'trial_used': bool, 'pro_expires_at': String?}.
+  static Future<Map<String, dynamic>> getUserState(String email) async {
     if (email.isEmpty || email == 'default_user') {
       return {'pro': false, 'trial_used': false};
     }
@@ -137,6 +137,7 @@ class CloudSyncService {
           return {
             'pro': data['pro'] == true,
             'trial_used': data['trial_used'] == true,
+            'pro_expires_at': data['pro_expires_at'],
           };
         }
       }
@@ -152,6 +153,7 @@ class CloudSyncService {
     String email, {
     bool? pro,
     bool? trialUsed,
+    String? proExpiresAt,
   }) async {
     if (email.isEmpty || email == 'default_user') return;
 
@@ -164,6 +166,7 @@ class CloudSyncService {
     };
     if (pro != null) payload['pro'] = pro;
     if (trialUsed != null) payload['trial_used'] = trialUsed;
+    if (proExpiresAt != null) payload['pro_expires_at'] = proExpiresAt;
 
     try {
       await http
@@ -234,6 +237,7 @@ class CloudSyncService {
     required String email,
     required String refNumber,
     required double amount,
+    String plan = 'lifetime',
   }) async {
     final cleanRef = refNumber.replaceAll(RegExp(r'[^0-9]'), '');
     if (cleanRef.isEmpty || email.isEmpty) return false;
@@ -243,6 +247,7 @@ class CloudSyncService {
       'email': email.trim().toLowerCase(),
       'ref_number': cleanRef,
       'amount': amount,
+      'plan': plan,
       'status': 'pending', // pending, approved, rejected
       'submitted_at': DateTime.now().toIso8601String(),
     };
@@ -327,7 +332,7 @@ class CloudSyncService {
   }
 
   /// Approves a GCash payment request by refNumber and unlocks PRO for the user.
-  static Future<bool> approvePaymentRequest(String refNumber, String email) async {
+  static Future<bool> approvePaymentRequest(String refNumber, String email, {String plan = 'lifetime'}) async {
     final cleanRef = refNumber.replaceAll(RegExp(r'[^0-9]'), '');
     if (cleanRef.isEmpty) return false;
 
@@ -344,7 +349,11 @@ class CloudSyncService {
       ).timeout(const Duration(seconds: 4));
 
       // Unlock PRO license for user in Cloud DB
-      await saveUserState(email, pro: true);
+      String? expiresAt;
+      if (plan == 'monthly') {
+        expiresAt = DateTime.now().add(const Duration(days: 30)).toIso8601String();
+      }
+      await saveUserState(email, pro: true, proExpiresAt: expiresAt);
       return true;
     } catch (e) {
       debugPrint('CloudSyncService: Approve payment error: $e');
@@ -381,6 +390,7 @@ class CloudSyncService {
     required String accountName,
     String? qrImageUrl,
     String? proPrice,
+    String? monthlyPrice,
   }) async {
     try {
       final url = Uri.parse(_auth('$_settingsUrl/gcash_config.json'));
@@ -389,6 +399,7 @@ class CloudSyncService {
         'account_name': accountName.trim(),
         'qr_image_url': (qrImageUrl ?? '').trim(),
         'pro_price': (proPrice ?? '').trim(),
+        'monthly_price': (monthlyPrice ?? '').trim(),
         'updated_at': DateTime.now().toIso8601String(),
       };
       final response = await http.patch(
@@ -416,13 +427,14 @@ class CloudSyncService {
             'account_name': data['account_name']?.toString() ?? '',
             'qr_image_url': data['qr_image_url']?.toString() ?? '',
             'pro_price': data['pro_price']?.toString() ?? '',
+            'monthly_price': data['monthly_price']?.toString() ?? '',
           };
         }
       }
     } catch (e) {
       debugPrint('CloudSyncService: Get GCash settings error: $e');
     }
-    return {'gcash_number': '', 'account_name': '', 'qr_image_url': '', 'pro_price': ''};
+    return {'gcash_number': '', 'account_name': '', 'qr_image_url': '', 'pro_price': '', 'monthly_price': ''};
   }
 
   /// Fetches all registered users from Firebase Database.

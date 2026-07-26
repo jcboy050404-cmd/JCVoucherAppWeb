@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/trial_service.dart';
 import '../services/auth_service.dart';
+import '../services/force_update_service.dart';
 
 
 class AdminScreen extends StatefulWidget {
@@ -30,6 +31,7 @@ class _AdminScreenState extends State<AdminScreen> {
   final TextEditingController _gcashNameCtrl = TextEditingController();
   final TextEditingController _qrUrlCtrl = TextEditingController();
   final TextEditingController _proPriceCtrl = TextEditingController();
+  final TextEditingController _monthlyPriceCtrl = TextEditingController();
   bool _isSavingSettings = false;
   int _currentTabIndex = 0;
   List<Map<String, dynamic>> _allUsers = [];
@@ -37,11 +39,34 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _pppoeUnlocked = false;
   bool _isSavingGlobal = false;
 
+  // Force Update config — values currently published to the backend.
+  String _forceUpdateLatest = '';
+  String _forceUpdateUrl = '';
+  bool _forceUpdateEnabled = true;
+  bool _isLoadingForceUpdate = true;
+  bool _isSavingForceUpdate = false;
+
   Future<void> _loadGlobalSettings() async {
     final settings = await CloudSyncService.getGlobalSettings();
     if (mounted) {
       setState(() {
         _pppoeUnlocked = settings['pppoe_unlocked'] == true;
+      });
+    }
+  }
+
+  /// Fetches the current force-update config so the card can show what's
+  /// live on the backend (and pre-fill the edit dialog).
+  Future<void> _loadForceUpdateConfig() async {
+    final config = await ForceUpdateService.getConfig();
+    if (mounted) {
+      setState(() {
+        _isLoadingForceUpdate = false;
+        if (config != null) {
+          _forceUpdateLatest = config.latestVersion;
+          _forceUpdateUrl = config.updateUrl;
+          _forceUpdateEnabled = config.enabled;
+        }
       });
     }
   }
@@ -86,6 +111,7 @@ class _AdminScreenState extends State<AdminScreen> {
     _loadAllUsers();
     _loadGCashSettings();
     _loadGlobalSettings();
+    _loadForceUpdateConfig();
   }
 
   @override
@@ -96,6 +122,7 @@ class _AdminScreenState extends State<AdminScreen> {
     _gcashNameCtrl.dispose();
     _qrUrlCtrl.dispose();
     _proPriceCtrl.dispose();
+    _monthlyPriceCtrl.dispose();
     super.dispose();
   }
 
@@ -107,6 +134,7 @@ class _AdminScreenState extends State<AdminScreen> {
         if (_gcashNameCtrl.text.isEmpty) _gcashNameCtrl.text = cfg['account_name'] ?? '';
         if (_qrUrlCtrl.text.isEmpty) _qrUrlCtrl.text = cfg['qr_image_url'] ?? '';
         if (_proPriceCtrl.text.isEmpty) _proPriceCtrl.text = cfg['pro_price'] ?? '';
+        if (_monthlyPriceCtrl.text.isEmpty) _monthlyPriceCtrl.text = cfg['monthly_price'] ?? '150';
       });
     }
   }
@@ -119,6 +147,7 @@ class _AdminScreenState extends State<AdminScreen> {
         accountName: _gcashNameCtrl.text.trim(),
         qrImageUrl: _qrUrlCtrl.text.trim(),
         proPrice: _proPriceCtrl.text.trim(),
+        monthlyPrice: _monthlyPriceCtrl.text.trim(),
       );
       if (!mounted) return;
       if (success) {
@@ -184,8 +213,8 @@ class _AdminScreenState extends State<AdminScreen> {
       await TrialService.unlockPro(email, null);
       if (!mounted) return;
       TopToast.show(context, '✅ Approved & Granted PRO to $email!', backgroundColor: const Color(0xFF34A853));
-      await _loadAllRequests();
-      await _loadAllUsers();
+      _loadAllRequests();
+    _loadAllUsers();
     }
   }
 
@@ -193,8 +222,8 @@ class _AdminScreenState extends State<AdminScreen> {
     final success = await CloudSyncService.rejectPaymentRequest(refNumber);
     if (success && mounted) {
       TopToast.show(context, 'Rejected request $refNumber', backgroundColor: const Color(0xFFFF5252));
-      await _loadAllRequests();
-      await _loadAllUsers();
+      _loadAllRequests();
+    _loadAllUsers();
     }
   }
 
@@ -230,6 +259,32 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  Future<void> _changeUserAccountType(String email, String type) async {
+    if (email.isEmpty || email == 'No Email') return;
+    
+    setState(() => _isLoadingUsers = true);
+    try {
+      if (type == 'trial') {
+        await CloudSyncService.saveUserState(email, pro: false, proExpiresAt: '');
+      } else if (type == 'lifetime') {
+        await CloudSyncService.saveUserState(email, pro: true, proExpiresAt: '');
+      } else if (type == 'monthly') {
+        final now = DateTime.now();
+        final expiry = now.add(const Duration(days: 30));
+        await CloudSyncService.saveUserState(email, pro: true, proExpiresAt: expiry.toIso8601String());
+      }
+      if (mounted) {
+        TopToast.show(context, '✅ Updated account to ${type.toUpperCase()}', backgroundColor: const Color(0xFF34A853));
+      }
+    } catch (e) {
+      if (mounted) {
+        TopToast.show(context, '❌ Failed to update account: $e', backgroundColor: const Color(0xFFFF5252));
+      }
+    } finally {
+      _loadAllUsers();
+    }
+  }
+
   Future<void> _grantManualPro() async {
     final email = _manualEmailCtrl.text.trim();
     if (email.isEmpty || !email.contains('@')) {
@@ -241,15 +296,9 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       await CloudSyncService.saveUserState(email, pro: true);
       await TrialService.unlockPro(email, null);
-      
-      final fakeRef = 'MANUAL-${DateTime.now().millisecondsSinceEpoch}';
-      await CloudSyncService.submitPaymentRequest(email: email, refNumber: fakeRef, amount: 0);
-      await CloudSyncService.approvePaymentRequest(fakeRef, email);
-
       if (!mounted) return;
       _manualEmailCtrl.clear();
       TopToast.show(context, '⚡ PRO License Granted to $email!', backgroundColor: const Color(0xFF34A853));
-      await _loadAllUsers();
     } catch (e) {
       if (mounted) {
         TopToast.show(context, 'Error: ${e.toString()}', backgroundColor: const Color(0xFFFF5252));
@@ -291,6 +340,11 @@ class _AdminScreenState extends State<AdminScreen> {
                 children: [
                   Text(
                     'Admin Portal',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'GCash Payments & Pro Management',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -360,6 +414,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                               _buildManualGrantCard(),
                                               const SizedBox(height: 18),
                                               _buildGlobalSettingsCard(),
+                                              const SizedBox(height: 18),
+                                              _buildForceUpdateCard(),
                                             ],
                                           )),
                                     ],
@@ -371,6 +427,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                 _buildManualGrantCard(),
                                 const SizedBox(height: 20),
                                 _buildGlobalSettingsCard(),
+                                const SizedBox(height: 20),
+                                _buildForceUpdateCard(),
                               ],
                               const SizedBox(height: 24),
 
@@ -614,6 +672,25 @@ class _AdminScreenState extends State<AdminScreen> {
                 ],
               ),
               const SizedBox(width: 8),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded, color: Colors.white70, size: 20),
+                color: const Color(0xFF1A1A2E),
+                onSelected: (val) => _changeUserAccountType(email, val),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'trial',
+                    child: Text('Set to Free/Trial', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13)),
+                  ),
+                  PopupMenuItem(
+                    value: 'monthly',
+                    child: Text('Set to PRO (Monthly)', style: GoogleFonts.poppins(color: Colors.white, fontSize: 13)),
+                  ),
+                  PopupMenuItem(
+                    value: 'lifetime',
+                    child: Text('Set to PRO (Lifetime)', style: GoogleFonts.poppins(color: const Color(0xFF34A853), fontSize: 13, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
               IconButton(
                 icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF5252), size: 22),
                 onPressed: () => _confirmDeleteUser(id, email),
@@ -810,6 +887,372 @@ class _AdminScreenState extends State<AdminScreen> {
         ],
       ),
     );
+  }
+
+  /// Force Update config card — lets the admin publish the minimum required
+  /// app version and the download URL. Reads/writes the `/settings/force_update`
+  /// node via [ForceUpdateService].
+  Widget _buildForceUpdateCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF14142D),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFF00BFFF).withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.system_update_rounded,
+                  color: Color(0xFF00BFFF), size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Force Update',
+                  style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+              // Active / inactive badge
+              if (!_isLoadingForceUpdate)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: (_forceUpdateEnabled && _forceUpdateLatest.isNotEmpty)
+                        ? const Color(0xFF34A853).withValues(alpha: 0.15)
+                        : Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    (_forceUpdateEnabled && _forceUpdateLatest.isNotEmpty)
+                        ? 'ACTIVE'
+                        : 'INACTIVE',
+                    style: GoogleFonts.poppins(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color:
+                          (_forceUpdateEnabled && _forceUpdateLatest.isNotEmpty)
+                              ? const Color(0xFF34A853)
+                              : Colors.white54,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_isLoadingForceUpdate)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Color(0xFF00BFFF)),
+                ),
+              ),
+            )
+          else ...[
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('Latest Version',
+                          style: GoogleFonts.poppins(
+                              color: Colors.white54, fontSize: 10)),
+                      const SizedBox(width: 6),
+                      Text(
+                        _forceUpdateLatest.isEmpty
+                            ? 'Not set'
+                            : 'v$_forceUpdateLatest',
+                        style: GoogleFonts.poppins(
+                            color: const Color(0xFF00BFFF),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  if (_forceUpdateUrl.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      _forceUpdateUrl,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(
+                          color: Colors.white38, fontSize: 10),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isSavingForceUpdate ? null : _showForceUpdateDialog,
+                icon: const Icon(Icons.edit_rounded, size: 16),
+                label: Text(
+                  _forceUpdateLatest.isEmpty ? 'Set Update' : 'Update',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00BFFF),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Form dialog for entering the Download Link + Version Number.
+  /// Mirrors the form-dialog pattern in scripts_screen.dart.
+  Future<void> _showForceUpdateDialog() async {
+    final formKey = GlobalKey<FormState>();
+    final versionCtrl =
+        TextEditingController(text: _forceUpdateLatest);
+    final urlCtrl = TextEditingController(text: _forceUpdateUrl);
+    // Local toggle seeded from current backend value.
+    var enabled = _forceUpdateEnabled;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF161626),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          title: Row(
+            children: [
+              const Icon(Icons.system_update_rounded,
+                  color: Color(0xFF00BFFF), size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Force Update',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Users on a version below the Latest Version will be shown a mandatory update dialog.',
+                    style: GoogleFonts.poppins(
+                        color: Colors.white54, fontSize: 11, height: 1.4),
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: versionCtrl,
+                    keyboardType: TextInputType.text,
+                    style: GoogleFonts.poppins(
+                        color: Colors.white, fontSize: 13),
+                    validator: (v) {
+                      final s = v?.trim() ?? '';
+                      if (s.isEmpty) return 'Enter a version number';
+                      if (!RegExp(r'^\d+\.\d+\.\d+$').hasMatch(s)) {
+                        return 'Use format: major.minor.patch (e.g. 2.3.1)';
+                      }
+                      return null;
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'Version Number',
+                      labelStyle: GoogleFonts.poppins(
+                          color: Colors.white60, fontSize: 12),
+                      hintText: 'e.g. 2.3.1',
+                      hintStyle: GoogleFonts.poppins(
+                          color: Colors.white24, fontSize: 12),
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF00BFFF)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: urlCtrl,
+                    keyboardType: TextInputType.url,
+                    style: GoogleFonts.poppins(
+                        color: Colors.white, fontSize: 13),
+                    validator: (v) {
+                      final s = v?.trim() ?? '';
+                      if (s.isEmpty) return 'Enter a download link';
+                      final uri = Uri.tryParse(s);
+                      if (uri == null ||
+                          (!uri.isScheme('http') && !uri.isScheme('https'))) {
+                        return 'Enter a valid http(s):// URL';
+                      }
+                      return null;
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'Download Link',
+                      labelStyle: GoogleFonts.poppins(
+                          color: Colors.white60, fontSize: 12),
+                      hintText: 'https://...',
+                      hintStyle: GoogleFonts.poppins(
+                          color: Colors.white24, fontSize: 12),
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF00BFFF)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // Enabled toggle inside the dialog.
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Enabled',
+                                  style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500)),
+                              Text(
+                                  'Turn off to pause the gate without clearing the version',
+                                  style: GoogleFonts.poppins(
+                                      color: Colors.white54, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: enabled,
+                          onChanged: (v) =>
+                              setDialogState(() => enabled = v),
+                          activeColor: const Color(0xFF00BFFF),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel',
+                  style: GoogleFonts.poppins(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              onPressed: _isSavingForceUpdate
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      final version = versionCtrl.text.trim();
+                      final url = urlCtrl.text.trim();
+                      Navigator.pop(ctx);
+                      await _saveForceUpdate(
+                          latestVersion: version,
+                          updateUrl: url,
+                          enabled: enabled);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF34A853),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _isSavingForceUpdate
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text('Save',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveForceUpdate({
+    required String latestVersion,
+    required String updateUrl,
+    required bool enabled,
+  }) async {
+    setState(() => _isSavingForceUpdate = true);
+    final success = await ForceUpdateService.saveConfig(
+      latestVersion: latestVersion,
+      updateUrl: updateUrl,
+      enabled: enabled,
+    );
+    if (mounted) {
+      setState(() {
+        _isSavingForceUpdate = false;
+        if (success) {
+          _forceUpdateLatest = latestVersion;
+          _forceUpdateUrl = updateUrl;
+          _forceUpdateEnabled = enabled;
+        }
+      });
+      if (success) {
+        TopToast.show(context, '✅ Force Update saved globally!',
+            backgroundColor: const Color(0xFF34A853));
+      } else {
+        TopToast.show(context, '❌ Failed to save Force Update',
+            backgroundColor: const Color(0xFFFF5252));
+      }
+    }
   }
 
   Widget _buildManualGrantCard() {
@@ -1078,6 +1521,26 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           const SizedBox(height: 12),
 
+          // Monthly Price
+          Text('Monthly Version Price (PHP):', style: GoogleFonts.poppins(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _monthlyPriceCtrl,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              hintText: 'e.g. 150',
+              hintStyle: GoogleFonts.poppins(color: Colors.white38, fontSize: 12),
+              prefixIcon: const Icon(Icons.payments_rounded, color: Color(0xFF00BFFF), size: 18),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.05),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF00BFFF), width: 1.5)),
+            ),
+          ),
+          const SizedBox(height: 12),
+
           // GCash Number
           Text('GCash Mobile Number:', style: GoogleFonts.poppins(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
           const SizedBox(height: 6),
@@ -1241,6 +1704,7 @@ class _AdminScreenState extends State<AdminScreen> {
     final email = req['email'] ?? 'Unknown Email';
     final refNo = req['ref_number'] ?? 'N/A';
     final amount = req['amount'] ?? 1.0;
+    final plan = (req['plan'] ?? 'lifetime').toString().toUpperCase();
     final status = (req['status'] ?? 'pending').toString().toLowerCase();
     final submitted = (req['submitted_at'] ?? '').toString();
 
@@ -1308,9 +1772,18 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                '₱$amount',
-                style: GoogleFonts.poppins(color: const Color(0xFF00BFFF), fontSize: 15, fontWeight: FontWeight.bold),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    plan,
+                    style: GoogleFonts.poppins(color: const Color(0xFFBB86FC), fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '₱$amount',
+                    style: GoogleFonts.poppins(color: const Color(0xFF00BFFF), fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
             ],
           ),
