@@ -24,6 +24,9 @@ import 'cloud_sync_service.dart';
 class ForceUpdateService {
   ForceUpdateService._();
 
+  static bool _isShowingDialog = false;
+  static bool _isChecking = false;
+
   /// Parsed force-update config. Null when the backend has no config yet.
   static Future<ForceUpdateConfig?> getConfig() async {
     final settings = await CloudSyncService.getGlobalSettings();
@@ -64,13 +67,15 @@ class ForceUpdateService {
     return 0;
   }
 
-  /// Returns the currently installed app version (e.g. "1.0.0") stripped of
-  /// any build suffix ("+1") so it can be compared against `latest_version`.
+  /// Returns the currently installed app version (e.g. "1.0.0+1").
+  /// Includes the build suffix so we can safely compare versions like 1.0.0+2.
   static Future<String> getInstalledVersion() async {
     final info = await PackageInfo.fromPlatform();
-    // packageInfo.version may contain a build suffix; only the dotted prefix
-    // before '+' is the semver we want to compare.
-    return info.version.split('+').first.trim();
+    String version = info.version.trim();
+    if (info.buildNumber.isNotEmpty && !version.contains('+')) {
+      version = '$version+${info.buildNumber.trim()}';
+    }
+    return version;
   }
 
   /// Runs the version check and, when an update is required, shows the
@@ -82,24 +87,33 @@ class ForceUpdateService {
   /// Failures (no config, network error, missing version) are non-blocking —
   /// we never lock users out of the app because of a transient backend issue.
   static Future<bool> checkAndShowIfRequired(BuildContext context) async {
-    final config = await getConfig();
-    if (config == null) return false;
-    if (!config.enabled) return false;
-    if (config.latestVersion.isEmpty || config.updateUrl.isEmpty) return false;
+    if (_isShowingDialog) return true;
+    if (_isChecking) return false;
 
-    final installed = await getInstalledVersion();
-    final needsUpdate = compareVersions(installed, config.latestVersion) < 0;
-    if (!needsUpdate) return false;
+    _isChecking = true;
+    try {
+      final config = await getConfig();
+      if (config == null) return false;
+      if (!config.enabled) return false;
+      if (config.latestVersion.isEmpty || config.updateUrl.isEmpty) return false;
 
-    if (!context.mounted) return false;
-    await showForceUpdateDialog(
-      context: context,
-      latestVersion: config.latestVersion,
-      installedVersion: installed,
-      updateUrl: config.updateUrl,
-      message: config.message,
-    );
-    return true;
+      final installed = await getInstalledVersion();
+      final needsUpdate = compareVersions(installed, config.latestVersion) < 0;
+      if (!needsUpdate) return false;
+
+      if (!context.mounted) return false;
+      _isShowingDialog = true;
+      await showForceUpdateDialog(
+        context: context,
+        latestVersion: config.latestVersion,
+        installedVersion: installed,
+        updateUrl: config.updateUrl,
+        message: config.message,
+      );
+      return true;
+    } finally {
+      _isChecking = false;
+    }
   }
 }
 

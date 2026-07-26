@@ -272,6 +272,9 @@ class _AdminScreenState extends State<AdminScreen> {
         final expiry = now.add(const Duration(days: 30));
         await CloudSyncService.saveUserState(email, pro: true, proExpiresAt: expiry.toIso8601String());
       }
+
+      await TrialService.syncWithCloud(email);
+
       if (mounted) {
         TopToast.show(context, '✅ Updated account to ${type.toUpperCase()}', backgroundColor: const Color(0xFF34A853));
       }

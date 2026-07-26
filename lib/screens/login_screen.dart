@@ -9,6 +9,7 @@ import '../services/mikrotik_service.dart';
 import '../services/auth_service.dart';
 import '../services/trial_service.dart';
 import '../services/cloud_sync_service.dart';
+import '../services/force_update_service.dart';
 import '../responsive.dart';
 import 'dashboard_screen.dart';
 import 'admin_screen.dart';
@@ -61,6 +62,10 @@ class _LoginScreenState extends State<LoginScreen>
     _loadSavedSettings();
     _fadeController.forward();
     _slideController.forward();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ForceUpdateService.checkAndShowIfRequired(context);
+    });
   }
 
   @override
@@ -272,8 +277,6 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _authenticateWithGoogleFlow() async {
-    final rootMessenger = ScaffoldMessenger.of(context);
-
     try {
       // 1. Authenticate with Google (returns user but does not save session yet)
       final tempUser = await AuthService.instance.authenticateWithGoogle();
@@ -347,8 +350,6 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _authenticateEmailFlow(String email) async {
-    final rootMessenger = ScaffoldMessenger.of(context);
-
     // 1. Show loading indicator overlay
     showDialog(
       context: context,
@@ -403,11 +404,10 @@ class _LoginScreenState extends State<LoginScreen>
         displayName: displayName?.isNotEmpty == true ? displayName : null,
         photoUrl: photoUrl?.isNotEmpty == true ? photoUrl : null,
       );
-      if (user != null) {
-        await _saveRecentAccount(user);
-      }
+      await _saveRecentAccount(user);
       // SnackBar removed per request
     } catch (e) {
+      // Ignore login errors
     }
   }
 
@@ -2259,7 +2259,7 @@ class _PinBottomSheet extends StatelessWidget {
 class PremiumGoogleButton extends StatefulWidget {
   final VoidCallback onTap;
 
-  const PremiumGoogleButton({Key? key, required this.onTap}) : super(key: key);
+  const PremiumGoogleButton({super.key, required this.onTap});
 
   @override
   State<PremiumGoogleButton> createState() => _PremiumGoogleButtonState();

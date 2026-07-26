@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
-import 'services/force_update_service.dart';
 
 /// Global route observer used by list/dashboard screens to auto-refresh their
 /// data when they become the active route again (e.g. after generating
@@ -96,14 +95,6 @@ class _AppStartupState extends State<AppStartup> {
     await AuthService.instance.init();
 
     if (!mounted) return;
-
-    // Force-update check: if the installed app version is below the
-    // admin-published latest_version, show a mandatory non-dismissible dialog
-    // and stop here — the user must update before reaching the login screen.
-    // checkAndShowIfRequired is fail-open: any backend/network error simply
-    // lets the user proceed rather than locking them out.
-    final blocked = await ForceUpdateService.checkAndShowIfRequired(context);
-    if (blocked) return;
 
     // Navigate to LoginScreen. The Gmail card will already show the restored
     // account — user only needs to tap a router to connect.

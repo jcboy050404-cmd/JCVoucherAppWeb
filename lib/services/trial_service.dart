@@ -105,6 +105,14 @@ class TrialService {
     return false;
   }
 
+  /// Returns the Pro expiration date string if it exists, otherwise null
+  static Future<String?> getProExpiration([String? email]) async {
+    final userEmail = getEmail(email);
+    if (userEmail.isEmpty) return null;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('$_proExpiresPrefix$userEmail');
+  }
+
   /// Unlocks Pro status specifically for [email] across Local, Router, and Cloud.
   static Future<void> unlockPro([String? email, MikrotikService? service]) async {
     final userEmail = getEmail(email);
@@ -120,6 +128,42 @@ class TrialService {
 
     // Save to Cloud DB
     await CloudSyncService.saveUserState(userEmail, pro: true);
+  }
+
+  /// Syncs the local PRO status with the cloud database.
+  /// This ensures that if an Admin revokes PRO from the cloud, the user's local device updates immediately.
+  static Future<void> syncWithCloud([String? email, MikrotikService? service]) async {
+    final userEmail = getEmail(email);
+    if (userEmail.isEmpty) return;
+
+    final cloudData = await CloudSyncService.getUserState(userEmail);
+    if (cloudData.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      final cloudPro = cloudData['pro'] == true;
+      final localPro = prefs.getBool('$_proPrefix$userEmail') ?? false;
+
+      if (cloudPro) {
+        await prefs.setBool('$_proPrefix$userEmail', true);
+        final expStr = cloudData['pro_expires_at'] as String?;
+        if (expStr != null && expStr.isNotEmpty) {
+          await prefs.setString('$_proExpiresPrefix$userEmail', expStr);
+        } else {
+          await prefs.remove('$_proExpiresPrefix$userEmail');
+        }
+        if (service != null && service.isConnected) {
+          await service.setRouterProFlag(userEmail);
+        }
+      } else {
+        // Cloud says NOT PRO. Revoke local.
+        if (localPro) {
+          await prefs.remove('$_proPrefix$userEmail');
+          await prefs.remove('$_proExpiresPrefix$userEmail');
+          if (service != null && service.isConnected) {
+             await service.removeRouterProFlag(userEmail);
+          }
+        }
+      }
+    }
   }
 
   /// Returns true if the user has already used their 1-time free trial voucher generation.

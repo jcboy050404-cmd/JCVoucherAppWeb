@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -24,11 +25,15 @@ Future<void> showForceUpdateDialog({
     context: context,
     barrierDismissible: false,
     useRootNavigator: true,
-    builder: (ctx) => ForceUpdateDialog(
-      latestVersion: latestVersion,
-      installedVersion: installedVersion,
-      updateUrl: updateUrl,
-      message: message,
+    barrierColor: Colors.black.withValues(alpha: 0.2),
+    builder: (ctx) => BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
+      child: ForceUpdateDialog(
+        latestVersion: latestVersion,
+        installedVersion: installedVersion,
+        updateUrl: updateUrl,
+        message: message,
+      ),
     ),
   );
 }
@@ -63,7 +68,7 @@ class ForceUpdateDialog extends StatelessWidget {
       canPop: false,
       child: Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: Container(
           padding: const EdgeInsets.all(1.5),
           decoration: BoxDecoration(
@@ -72,57 +77,61 @@ class ForceUpdateDialog extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(24),
           ),
-          child: Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: const Color(0xFF141428),
-              borderRadius: BorderRadius.circular(23),
-            ),
-            child: Column(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(23),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0A0A1A).withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(23),
+                ),
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 72,
-                  height: 72,
+                  width: 56,
+                  height: 56,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFF00BFFF), Color(0xFF7B2FBE)],
                     ),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
                         color: const Color(0xFF00BFFF).withValues(alpha: 0.4),
-                        blurRadius: 20,
+                        blurRadius: 16,
                       ),
                     ],
                   ),
                   child: const Icon(
                     Icons.system_update_rounded,
                     color: Colors.white,
-                    size: 36,
+                    size: 28,
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 Text(
                   'Update Required',
                   style: GoogleFonts.poppins(
-                    fontSize: 22,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   message ??
                       'A new version of VoucherApp is available. Please update to continue using the app.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
-                    fontSize: 13,
+                    fontSize: 11,
                     color: Colors.white60,
-                    height: 1.5,
+                    height: 1.4,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 // Version chips
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -173,11 +182,11 @@ class ForceUpdateDialog extends StatelessWidget {
                       ),
                       child: Container(
                         alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Text(
                           'Update Now',
                           style: GoogleFonts.poppins(
-                            fontSize: 15,
+                            fontSize: 13,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
                           ),
@@ -187,6 +196,8 @@ class ForceUpdateDialog extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+              ),
             ),
           ),
         ),
@@ -232,7 +243,7 @@ class _VersionChip extends StatelessWidget {
             'v$value',
             style: GoogleFonts.poppins(
               color: color,
-              fontSize: 14,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
           ),

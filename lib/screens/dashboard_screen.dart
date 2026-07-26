@@ -40,6 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   String? _error;
   bool _trialLocked = false;
   bool _isPro = false;
+  String? _proExpiresAt;
   bool _pppoeUnlocked = false;
 
   late AnimationController _fadeCtrl;
@@ -91,8 +92,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       final vouchers = await widget.service.getVouchers();
       final activeSessions = await widget.service.getActiveSessions(vouchers);
       final currentUserEmail = AuthService.instance.currentUser?.email;
+      await TrialService.syncWithCloud(currentUserEmail, widget.service);
       final trialLocked = await TrialService.isTrialLocked(currentUserEmail, widget.service);
       final isPro = await TrialService.isPro(currentUserEmail);
+      final proExpiresAt = await TrialService.getProExpiration(currentUserEmail);
       final settings = await CloudSyncService.getGlobalSettings();
       if (!mounted) return;
       setState(() {
@@ -100,6 +103,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _activeSessions = activeSessions;
         _trialLocked = trialLocked;
         _isPro = isPro;
+        _proExpiresAt = proExpiresAt;
         _pppoeUnlocked = settings['pppoe_unlocked'] == true;
         _loading = false;
       });
@@ -132,6 +136,16 @@ class _DashboardScreenState extends State<DashboardScreen>
         _error = e.toString().replaceFirst('Exception: ', '');
         _loading = false;
       });
+    }
+  }
+
+  String _formatExpDate(String isoString) {
+    try {
+      final date = DateTime.parse(isoString);
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    } catch (_) {
+      return isoString;
     }
   }
 
@@ -1508,6 +1522,80 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
               ),
 
+
+              // ── PRO Mode Banner (Monthly) ───────────────────────────────
+              if (_isPro && _proExpiresAt != null && _proExpiresAt!.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    child: Container(
+                      padding: const EdgeInsets.all(1.5),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF34A853), Color(0xFF00C853)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1A0E2E),
+                          borderRadius: BorderRadius.circular(19),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF34A853), Color(0xFF00C853)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF34A853).withValues(alpha: 0.4),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(Icons.verified_rounded, color: Colors.white, size: 22),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'PRO Monthly Active',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Valid until ${_formatExpDate(_proExpiresAt!)}',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 11,
+                                      color: Colors.white54,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
               // ── Trial Mode Banner ─────────────────────────────────────────
               if (_trialLocked)
