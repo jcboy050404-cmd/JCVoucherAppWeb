@@ -184,8 +184,21 @@ class _AdminScreenState extends State<AdminScreen> {
       await TrialService.unlockPro(email, null);
       if (!mounted) return;
       TopToast.show(context, '✅ Approved & Granted PRO to $email!', backgroundColor: const Color(0xFF34A853));
+      
+      // Update local state immediately for instant feedback
+      setState(() {
+        final reqIdx = _allRequests.indexWhere((r) => r['ref_number'] == refNumber);
+        if (reqIdx != -1) {
+          _allRequests[reqIdx]['status'] = 'approved';
+        }
+        final userIdx = _allUsers.indexWhere((u) => u['email'] == email);
+        if (userIdx != -1) {
+          _allUsers[userIdx]['pro'] = true;
+        }
+      });
+      
       _loadAllRequests();
-    _loadAllUsers();
+      _loadAllUsers();
     }
   }
 
@@ -244,6 +257,15 @@ class _AdminScreenState extends State<AdminScreen> {
       if (!mounted) return;
       _manualEmailCtrl.clear();
       TopToast.show(context, '⚡ PRO License Granted to $email!', backgroundColor: const Color(0xFF34A853));
+      
+      // Update local state immediately
+      setState(() {
+        final userIdx = _allUsers.indexWhere((u) => u['email'] == email.toLowerCase());
+        if (userIdx != -1) {
+          _allUsers[userIdx]['pro'] = true;
+        }
+      });
+      _loadAllUsers();
     } catch (e) {
       if (mounted) {
         TopToast.show(context, 'Error: ${e.toString()}', backgroundColor: const Color(0xFFFF5252));
@@ -285,11 +307,6 @@ class _AdminScreenState extends State<AdminScreen> {
                 children: [
                   Text(
                     'Admin Portal',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    'GCash Payments & Pro Management',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
