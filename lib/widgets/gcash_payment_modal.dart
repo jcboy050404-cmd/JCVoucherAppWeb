@@ -120,9 +120,10 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
 
     setState(() => _isSubmittingGCash = true);
     try {
-      final priceStr = _selectedPlan == 'monthly' 
-          ? (widget.gcashConfig?['monthly_price'] ?? '150') 
-          : (widget.gcashConfig?['pro_price'] ?? '1');
+      final monthlyPrice = widget.gcashConfig?['monthly_price']?.isNotEmpty == true ? widget.gcashConfig!['monthly_price']! : '150';
+      final proPrice = widget.gcashConfig?['pro_price']?.isNotEmpty == true ? widget.gcashConfig!['pro_price']! : '299';
+      
+      final priceStr = _selectedPlan == 'monthly' ? monthlyPrice : proPrice;
       final amount = double.tryParse(priceStr) ?? 1.00;
 
       final success = await CloudSyncService.submitPaymentRequest(
@@ -427,7 +428,7 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
                 Expanded(
                   child: _PlanOption(
                     title: 'Monthly',
-                    price: 'PHP ${cfg['monthly_price']?.isNotEmpty == true ? cfg['monthly_price'] : '150.00'}',
+                    price: 'PHP ${cfg['monthly_price']?.isNotEmpty == true ? cfg['monthly_price'] : '150'}',
                     isSelected: _selectedPlan == 'monthly',
                     onTap: () => setState(() => _selectedPlan = 'monthly'),
                   ),
@@ -436,7 +437,7 @@ class _GCashPaymentModalState extends State<GCashPaymentModal> {
                 Expanded(
                   child: _PlanOption(
                     title: 'Lifetime PRO',
-                    price: 'PHP ${cfg['pro_price']?.isNotEmpty == true ? cfg['pro_price'] : '1.00'}',
+                    price: 'PHP ${cfg['pro_price']?.isNotEmpty == true ? cfg['pro_price'] : '299'}',
                     isSelected: _selectedPlan == 'lifetime',
                     onTap: () => setState(() => _selectedPlan = 'lifetime'),
                   ),

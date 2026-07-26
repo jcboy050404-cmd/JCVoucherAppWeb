@@ -53,6 +53,7 @@ class TrialService {
         if (expDate != null && DateTime.now().isAfter(expDate)) {
           await prefs.remove('$_proPrefix$userEmail');
           await prefs.remove('$_proExpiresPrefix$userEmail');
+          await prefs.setBool('just_expired_$userEmail', true);
           if (service != null && service.isConnected) {
             await service.removeRouterProFlag(userEmail);
           }
@@ -82,6 +83,7 @@ class TrialService {
         if (expDate != null && DateTime.now().isAfter(expDate)) {
           await prefs.remove('$_proPrefix$userEmail');
           await prefs.remove('$_proExpiresPrefix$userEmail');
+          await prefs.setBool('just_expired_$userEmail', true);
           if (service != null && service.isConnected) {
             await service.removeRouterProFlag(userEmail);
           }

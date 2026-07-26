@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../services/mikrotik_service.dart';
 import '../services/voucher_pdf_service.dart';
@@ -103,6 +104,28 @@ class _DashboardScreenState extends State<DashboardScreen>
         _loading = false;
       });
       _fadeCtrl.forward(from: 0);
+
+      if (currentUserEmail != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final seenKey = 'seen_pro_popup_$currentUserEmail';
+        if (isPro) {
+          if (prefs.getBool(seenKey) != true) {
+            await prefs.setBool(seenKey, true);
+            if (mounted) {
+              _showProWelcomePopup();
+            }
+          }
+        } else {
+          await prefs.remove(seenKey);
+          final expiredKey = 'just_expired_$currentUserEmail';
+          if (prefs.getBool(expiredKey) == true) {
+            await prefs.remove(expiredKey);
+            if (mounted) {
+              _showProExpiredPopup();
+            }
+          }
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -129,6 +152,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   double get _todaySales {
     final now = DateTime.now();
     return _vouchers.where((v) {
+      if (!v.isUsed) return false;
       if (v.createdDate == null) return false;
       return v.createdDate!.year == now.year &&
           v.createdDate!.month == now.month &&
@@ -139,6 +163,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   double get _monthlySales {
     final now = DateTime.now();
     return _vouchers.where((v) {
+      if (!v.isUsed) return false;
       if (v.createdDate == null) return false;
       return v.createdDate!.year == now.year &&
           v.createdDate!.month == now.month;
@@ -1053,6 +1078,238 @@ class _DashboardScreenState extends State<DashboardScreen>
       label: label,
       gradient: gradient,
       onTap: onTap,
+    );
+  }
+
+  void _showProWelcomePopup() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A0E2E),
+            borderRadius: BorderRadius.circular(23),
+            border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.3)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF9800).withValues(alpha: 0.1),
+                blurRadius: 40,
+                spreadRadius: -10,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF9800).withValues(alpha: 0.4),
+                      blurRadius: 20,
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.verified_rounded, color: Colors.white, size: 36),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'You\'re Pro! 🎉',
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Unlimited voucher generation is now active. Enjoy Pro Mode!',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.white60,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ).copyWith(
+                    backgroundColor: WidgetStateProperty.all(Colors.transparent),
+                  ),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Container(
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      child: Text(
+                        'Awesome! →',
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showProExpiredPopup() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A0E2E),
+            borderRadius: BorderRadius.circular(23),
+            border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.3)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF5252).withValues(alpha: 0.1),
+                blurRadius: 40,
+                spreadRadius: -10,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF5252), Color(0xFFD32F2F)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF5252).withValues(alpha: 0.4),
+                      blurRadius: 20,
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.warning_rounded, color: Colors.white, size: 36),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Subscription Ended',
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your PRO monthly subscription has expired. Your account is back to Trial Mode.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.white60,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => UpgradeScreen(service: widget.service)),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ).copyWith(
+                    backgroundColor: WidgetStateProperty.all(Colors.transparent),
+                  ),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Container(
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      child: Text(
+                        'Renew Now →',
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  'Dismiss',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white54,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

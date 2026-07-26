@@ -45,6 +45,8 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _forceUpdateEnabled = true;
   bool _isLoadingForceUpdate = true;
   bool _isSavingForceUpdate = false;
+  
+  bool _showSettings = false;
 
   Future<void> _loadGlobalSettings() async {
     final settings = await CloudSyncService.getGlobalSettings();
@@ -206,15 +208,12 @@ class _AdminScreenState extends State<AdminScreen> {
   int get _approvedCount =>
       _allRequests.where((r) => r['status'] == 'approved').length;
 
-  Future<void> _approveRequest(String refNumber, String email) async {
+  Future<void> _approveRequest(String refNumber, String email, String plan) async {
     final success =
         await CloudSyncService.approvePaymentRequest(refNumber, email);
     if (success) {
-      await TrialService.unlockPro(email, null);
-      if (!mounted) return;
-      TopToast.show(context, '✅ Approved & Granted PRO to $email!', backgroundColor: const Color(0xFF34A853));
+      await _changeUserAccountType(email, plan.toLowerCase());
       _loadAllRequests();
-    _loadAllUsers();
     }
   }
 
@@ -355,6 +354,14 @@ class _AdminScreenState extends State<AdminScreen> {
         ),
         actions: [
           IconButton(
+            icon: Icon(
+              _showSettings ? Icons.close_rounded : Icons.settings_rounded,
+              color: Colors.white,
+            ),
+            onPressed: () => setState(() => _showSettings = !_showSettings),
+            tooltip: _showSettings ? 'Close Settings' : 'System Settings',
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Color(0xFF00BFFF)),
             onPressed: _loadAllRequests,
             tooltip: 'Refresh Requests',
@@ -389,16 +396,18 @@ class _AdminScreenState extends State<AdminScreen> {
                             _buildAdminBanner(currentUser?.email),
                             const SizedBox(height: 16),
 
-                            // Top Tabs
-                            _buildTopTabs(),
-                            const SizedBox(height: 16),
-
-                            if (_currentTabIndex == 0) ...[
-                              // Stats Dashboard
-                              _buildStatsRow(),
-                              const SizedBox(height: 20),
-
-                              // Two-column on wide screens, stacked on phones
+                            if (_showSettings) ...[
+                              Row(
+                                children: [
+                                  const Icon(Icons.settings_rounded, color: Colors.white70, size: 24),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'System Settings',
+                                    style: GoogleFonts.poppins(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
                               if (isWide)
                                 IntrinsicHeight(
                                   child: Row(
@@ -430,10 +439,18 @@ class _AdminScreenState extends State<AdminScreen> {
                                 const SizedBox(height: 20),
                                 _buildForceUpdateCard(),
                               ],
-                              const SizedBox(height: 24),
+                            ] else ...[
+                              // Top Tabs
+                              _buildTopTabs(),
+                              const SizedBox(height: 16),
 
-                              // Requests Section Header & Tabs
-                              Row(
+                              if (_currentTabIndex == 0) ...[
+                                // Stats Dashboard
+                                _buildStatsRow(),
+                                const SizedBox(height: 20),
+
+                                // Requests Section Header & Tabs
+                                Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
@@ -482,6 +499,7 @@ class _AdminScreenState extends State<AdminScreen> {
                             ] else ...[
                               _buildUserAccountsView(),
                             ],
+                           ],
                           ],
                         ),
                       ),
@@ -654,14 +672,14 @@ class _AdminScreenState extends State<AdminScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(color: const Color(0xFF9C27B0).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                      child: Text('ADMIN ??', style: GoogleFonts.poppins(color: const Color(0xFFE1BEE7), fontSize: 10, fontWeight: FontWeight.bold)),
+                      child: Text('ADMIN 👑', style: GoogleFonts.poppins(color: const Color(0xFFE1BEE7), fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   if (isPro && !isAdmin)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(color: const Color(0xFF34A853).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                      child: Text('PRO ?', style: GoogleFonts.poppins(color: const Color(0xFFA5D6A7), fontSize: 10, fontWeight: FontWeight.bold)),
+                      child: Text('PRO ⭐', style: GoogleFonts.poppins(color: const Color(0xFFA5D6A7), fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   if (!isPro && !isAdmin)
                     Container(
@@ -1775,10 +1793,28 @@ class _AdminScreenState extends State<AdminScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    plan,
-                    style: GoogleFonts.poppins(color: const Color(0xFFBB86FC), fontSize: 11, fontWeight: FontWeight.bold),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: plan == 'MONTHLY' 
+                          ? const Color(0xFFFF9800).withValues(alpha: 0.15) 
+                          : const Color(0xFFBB86FC).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: plan == 'MONTHLY' ? const Color(0xFFFF9800) : const Color(0xFFBB86FC),
+                      ),
+                    ),
+                    child: Text(
+                      plan,
+                      style: GoogleFonts.poppins(
+                        color: plan == 'MONTHLY' ? const Color(0xFFFF9800) : const Color(0xFFBB86FC),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
                   ),
+                  const SizedBox(height: 4),
                   Text(
                     '₱$amount',
                     style: GoogleFonts.poppins(color: const Color(0xFF00BFFF), fontSize: 15, fontWeight: FontWeight.bold),
@@ -1800,7 +1836,7 @@ class _AdminScreenState extends State<AdminScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => _approveRequest(refNo, email),
+                    onPressed: () => _approveRequest(refNo, email, plan),
                     icon: const Icon(Icons.check_circle_rounded,
                         color: Colors.white, size: 16),
                     label: Text(
