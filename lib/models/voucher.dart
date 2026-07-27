@@ -53,6 +53,30 @@ class Voucher {
     return 0.0;
   }
 
+  String get formattedPrice {
+    // 1. Try strict P: format
+    final matchP = RegExp(r'P:([0-9]+(?:\.[0-9]+)?)').firstMatch(comment);
+    if (matchP != null) return double.parse(matchP.group(1)!).toStringAsFixed(0);
+
+    // 2. Try Rp format
+    final matchRp = RegExp(r'Rp\.?\s*([0-9]+(?:\.[0-9]+)?)', caseSensitive: false).firstMatch(comment);
+    if (matchRp != null) return double.parse(matchRp.group(1)!).toStringAsFixed(0);
+
+    // 3. If comment is just a number
+    final numVal = double.tryParse(comment.trim());
+    if (numVal != null) return numVal.toStringAsFixed(0);
+    
+    // 4. Try to find a typical price number (>=1000) in the profile name (e.g. "2 Jam 2000")
+    final profileMatch = RegExp(r'([0-9]{3,})').allMatches(profile);
+    if (profileMatch.isNotEmpty) return profileMatch.last.group(1)!;
+    
+    // 5. Try to find any number >= 100 in the comment
+    final commentMatch = RegExp(r'([0-9]{3,})').firstMatch(comment);
+    if (commentMatch != null) return commentMatch.group(1)!;
+
+    return "0";
+  }
+
   DateTime? get createdDate {
     final match = RegExp(r'Date:(\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?)').firstMatch(comment);
     if (match != null) {

@@ -596,6 +596,11 @@ class _GenerateScreenState extends State<GenerateScreen> {
     }
 
     String effectiveComment = _commentController.text.trim();
+    final priceStr = _priceController.text.trim();
+    if (priceStr.isNotEmpty && priceStr != '0') {
+      effectiveComment = effectiveComment.isEmpty ? 'P:$priceStr' : '$effectiveComment P:$priceStr';
+    }
+
     if (_voucherFormatMode == 'code_only' && !effectiveComment.startsWith('vc-')) {
       effectiveComment = 'vc-$effectiveComment';
     } else if (_voucherFormatMode == 'user_pass' && !effectiveComment.startsWith('up-') && !effectiveComment.startsWith('vc-')) {
