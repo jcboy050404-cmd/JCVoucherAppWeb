@@ -1221,6 +1221,8 @@ class _VoucherListScreenState extends State<VoucherListScreen>
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF00BFFF),
                           foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.white10,
+                          disabledForegroundColor: Colors.white38,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
