@@ -321,7 +321,7 @@ class VoucherPdfService {
 
           // User Login / Code
           _thermalRow(
-              (voucher.password.isNotEmpty && voucher.password != voucher.name) ? 'User Login:' : 'Voucher Code:', 
+              (voucher.password.isNotEmpty) ? 'User Login:' : 'Voucher Code:', 
               voucher.name.toUpperCase(),
               labelSize: fieldLabelSize,
               valueSize: codeFontSize,
@@ -481,7 +481,7 @@ class VoucherPdfService {
                     mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
                     children: [
                       _sheetRow(
-                          (v.password.isNotEmpty && v.password != v.name) ? 'User Login:' : 'Voucher Code:', 
+                          (v.password.isNotEmpty) ? 'User Login:' : 'Voucher Code:', 
                           v.name.toUpperCase(),
                           baseFont: baseFont, boldFont: boldFont, bold: true),
                       if (v.password.isNotEmpty && v.password != v.name)
@@ -638,7 +638,7 @@ class VoucherPdfService {
           if (!hasPassword) ...[
             pw.Center(
               child: pw.Text(
-                'VOUCHER',
+                voucher.password.isNotEmpty ? 'USER LOGIN' : 'VOUCHER',
                 style: pw.TextStyle(
                   font: boldFont,
                   fontSize: 9.0,
