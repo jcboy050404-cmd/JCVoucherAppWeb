@@ -1935,7 +1935,7 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 14),
           Text(
-            'Voucher App v1.0  •  MikroTik API',
+            'Voucher App v1.0.1 •  MikroTik API',
             style: GoogleFonts.poppins(
               fontSize: 10.5,
               color: Colors.white24,

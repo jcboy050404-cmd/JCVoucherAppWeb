@@ -319,22 +319,25 @@ class VoucherPdfService {
           ),
           pw.SizedBox(height: 5),
 
-          // User Login
-          _thermalRow('User Login:', voucher.name.toUpperCase(),
+          // User Login / Code
+          _thermalRow(
+              (voucher.password.isNotEmpty && voucher.password != voucher.name) ? 'User Login:' : 'Voucher Code:', 
+              voucher.name.toUpperCase(),
               labelSize: fieldLabelSize,
               valueSize: codeFontSize,
               baseFont: baseFont,
               boldFont: boldFont,
               isCode: true),
 
-          // Password
-          _thermalRow(
-              'Password :', voucher.password.isNotEmpty ? voucher.password : '--',
-              labelSize: fieldLabelSize,
-              valueSize: codeFontSize,
-              baseFont: baseFont,
-              boldFont: boldFont,
-              isCode: true),
+          // Password (only if it exists and differs from username)
+          if (voucher.password.isNotEmpty && voucher.password != voucher.name)
+            _thermalRow(
+                'Password :', voucher.password,
+                labelSize: fieldLabelSize,
+                valueSize: codeFontSize,
+                baseFont: baseFont,
+                boldFont: boldFont,
+                isCode: true),
 
           pw.SizedBox(height: 3),
           pw.Container(height: 0.5, color: PdfColors.black),
@@ -477,10 +480,13 @@ class VoucherPdfService {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
                     children: [
-                      _sheetRow('User Login:', v.name.toUpperCase(),
+                      _sheetRow(
+                          (v.password.isNotEmpty && v.password != v.name) ? 'User Login:' : 'Voucher Code:', 
+                          v.name.toUpperCase(),
                           baseFont: baseFont, boldFont: boldFont, bold: true),
-                      _sheetRow('Password :', v.password.isNotEmpty ? v.password : '--',
-                          baseFont: baseFont, boldFont: boldFont, bold: true),
+                      if (v.password.isNotEmpty && v.password != v.name)
+                        _sheetRow('Password :', v.password,
+                            baseFont: baseFont, boldFont: boldFont, bold: true),
                       pw.Container(height: 0.5, color: PdfColors.black),
                       _sheetRow('Time Limit :', uptimeStr,
                           baseFont: baseFont, boldFont: boldFont),
@@ -600,7 +606,7 @@ class VoucherPdfService {
     required String loginUrl,
     required String footerNote,
   }) {
-    final bool hasPassword = voucher.password.isNotEmpty;
+    final bool hasPassword = voucher.password.isNotEmpty && voucher.password != voucher.name;
     final String uptimeStr =
         voucher.limitUptime.isNotEmpty ? voucher.limitUptime.toUpperCase() : '--';
 

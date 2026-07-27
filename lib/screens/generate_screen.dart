@@ -1,5 +1,4 @@
 import 'dart:convert';
-import '../widgets/top_toast.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -596,23 +595,13 @@ class _GenerateScreenState extends State<GenerateScreen> {
       effectiveUptime = _selectedUptime;
     }
 
-    final now = DateTime.now();
-    final dateStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
-    final priceStr = _priceController.text.trim();
-    final userComment = _commentController.text.trim();
-    final validityStr = _validityNumController.text.trim();
-
-    final parts = <String>[];
-    if (priceStr.isNotEmpty) parts.add('P:$priceStr');
-    if (validityStr.isNotEmpty && validityStr != '0') {
-      parts.add('Valid:$validityStr$_validityUnit');
+    String effectiveComment = _commentController.text.trim();
+    if (_voucherFormatMode == 'code_only' && !effectiveComment.startsWith('vc-')) {
+      effectiveComment = 'vc-$effectiveComment';
+    } else if (_voucherFormatMode == 'user_pass' && !effectiveComment.startsWith('up-') && !effectiveComment.startsWith('vc-')) {
+      effectiveComment = 'up-$effectiveComment';
     }
-    parts.add('Date:$dateStr');
-    if (userComment.isNotEmpty) parts.add(userComment);
-
-    final effectiveComment = parts.join(' | ');
+    
     final len = int.tryParse(_codeLengthController.text.trim()) ?? _codeLength;
     final targetCount = int.tryParse(_countController.text.trim()) ?? _count;
 
@@ -1949,9 +1938,10 @@ class _GenerateScreenState extends State<GenerateScreen> {
 
                       // 7. Comment section
                       _FormCardSection(
-                        header: _SectionLabel('Batch Label (optional)'),
+                        header: _SectionLabel('Batch Label / Comment (Required for Batch Print)'),
                         child: TextFormField(
                           controller: _commentController,
+                          validator: (val) => (val == null || val.trim().isEmpty) ? 'A batch label is required for batch printing' : null,
                           style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontSize: 14,
@@ -1961,6 +1951,8 @@ class _GenerateScreenState extends State<GenerateScreen> {
                             hintStyle: GoogleFonts.poppins(
                               color: Colors.white24,
                             ),
+                            helperText: 'Used to identify and print this batch of vouchers later.',
+                            helperStyle: GoogleFonts.poppins(color: const Color(0xFFF57C00), fontSize: 11),
                             prefixIcon: const Icon(
                               Icons.label_outline_rounded,
                               color: Colors.white38,

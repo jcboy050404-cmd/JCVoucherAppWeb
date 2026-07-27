@@ -23,6 +23,7 @@ import 'active_vouchers_screen.dart';
 import 'login_screen.dart';
 import 'upgrade_screen.dart';
 import 'pppoe_screen.dart';
+import '../widgets/top_toast.dart';
 
 class DashboardScreen extends StatefulWidget {
   final MikrotikService service;
@@ -42,6 +43,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _isPro = false;
   String? _proExpiresAt;
   bool _pppoeUnlocked = false;
+  bool _remoteConfigUnlocked = false;
 
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
@@ -105,6 +107,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _isPro = isPro;
         _proExpiresAt = proExpiresAt;
         _pppoeUnlocked = settings['pppoe_unlocked'] == true;
+        _remoteConfigUnlocked = settings['remote_config_unlocked'] == true;
         _loading = false;
       });
       _fadeCtrl.forward(from: 0);
@@ -1333,9 +1336,328 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  void _showRemoteConfigGuide() {
+    bool isLoading = true;
+    bool isSavingDDNS = false;
+    bool isSavingWebFig = false;
+    bool ddnsEnabled = false;
+    String dnsName = '';
+    bool webFigEnabled = false;
+    String webFigPort = '80';
+
+    void fetchStatus(Function(VoidCallback) setDialogState) async {
+      try {
+        final cloudStatus = await widget.service.getCloudStatus();
+        final webFigStatus = await widget.service.getWebFigStatus();
+        if (mounted) {
+          setDialogState(() {
+            ddnsEnabled = (cloudStatus['ddns-enabled'] ?? 'no').toLowerCase() == 'yes' || (cloudStatus['ddns-enabled'] ?? 'no').toLowerCase() == 'auto';
+            dnsName = cloudStatus['dns-name'] ?? '';
+            webFigEnabled = (webFigStatus['disabled'] ?? 'yes').toLowerCase() == 'no' || (webFigStatus['disabled'] ?? 'yes').toLowerCase() == 'false';
+            webFigPort = webFigStatus['port'] ?? '80';
+            isLoading = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setDialogState(() => isLoading = false);
+          TopToast.show(context, 'Error fetching status: $e', backgroundColor: const Color(0xFFFF5252));
+        }
+      }
+    }
+
+    void showEditPortDialog(String currentPort, Function(String) onPortChanged) {
+      final TextEditingController portController = TextEditingController(text: currentPort);
+      bool isSaving = false;
+      showDialog(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF161626),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFF00BFFF), width: 1),
+              ),
+              title: Text('Edit WebFig Port', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Enter the new port number for the WebFig (www) service.', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: portController,
+                    keyboardType: TextInputType.number,
+                    style: GoogleFonts.poppins(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Port Number',
+                      labelStyle: GoogleFonts.poppins(color: Colors.white54),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF00BFFF))),
+                      filled: true,
+                      fillColor: Colors.black26,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: isSaving ? null : () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.white60))),
+                isSaving ? const CircularProgressIndicator(color: Color(0xFF00BFFF)) : ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00BFFF), foregroundColor: Colors.white),
+                  onPressed: () async {
+                    final newPort = portController.text.trim();
+                    if (newPort.isEmpty) return;
+                    setDialogState(() => isSaving = true);
+                    try {
+                      await widget.service.setWebFigPort(newPort);
+                      onPortChanged(newPort);
+                      if (mounted) {
+                        Navigator.pop(ctx);
+                        TopToast.show(context, 'Port updated!', backgroundColor: const Color(0xFF34A853));
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        setDialogState(() => isSaving = false);
+                        TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
+                      }
+                    }
+                  },
+                  child: Text('Save', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          if (isLoading) {
+            fetchStatus(setStateDialog);
+            return const Dialog(
+              backgroundColor: Colors.transparent,
+              child: Center(child: CircularProgressIndicator(color: Color(0xFF00BFFF))),
+            );
+          }
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: SingleChildScrollView(
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161626),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFF00BFFF).withValues(alpha: 0.3), width: 1.5),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 46, height: 46,
+                          decoration: BoxDecoration(color: const Color(0xFF00BFFF).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(14)),
+                          child: const Icon(Icons.router_rounded, color: Color(0xFF00BFFF), size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Remote Config', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
+                              Text('Manage DDNS & WebFig', style: GoogleFonts.poppins(fontSize: 12, color: Colors.white54)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.03), borderRadius: BorderRadius.circular(16)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Enable DDNS', style: GoogleFonts.poppins(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 8, height: 8,
+                                      decoration: BoxDecoration(color: ddnsEnabled ? const Color(0xFF34A853) : const Color(0xFFFF5252), shape: BoxShape.circle),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        ddnsEnabled ? (dnsName.isEmpty ? 'Waiting for DNS Name...' : dnsName) : 'Stopped',
+                                        style: GoogleFonts.poppins(color: ddnsEnabled ? const Color(0xFF34A853) : const Color(0xFFFF5252), fontSize: 12, fontWeight: FontWeight.w500),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          isSavingDDNS
+                              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Color(0xFF00BFFF), strokeWidth: 2))
+                              : Switch(
+                                  value: ddnsEnabled,
+                                  activeColor: const Color(0xFF00BFFF),
+                                  onChanged: (val) async {
+                                    setStateDialog(() => isSavingDDNS = true);
+                                    try {
+                                      await widget.service.setDdnsEnabled(val);
+                                      if (val) {
+                                        int retries = 10;
+                                        while (retries > 0) {
+                                          await Future.delayed(const Duration(seconds: 1));
+                                          final st = await widget.service.getCloudStatus();
+                                          if ((st['dns-name'] ?? '').isNotEmpty) {
+                                            if (mounted) setStateDialog(() { dnsName = st['dns-name']!; ddnsEnabled = true; });
+                                            break;
+                                          }
+                                          retries--;
+                                        }
+                                      } else {
+                                        if (mounted) setStateDialog(() { ddnsEnabled = false; dnsName = ''; });
+                                      }
+                                    } catch (e) {
+                                      if (mounted) TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
+                                    } finally {
+                                      if (mounted) setStateDialog(() => isSavingDDNS = false);
+                                    }
+                                  },
+                                ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.03), borderRadius: BorderRadius.circular(16)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Enable WebFig', style: GoogleFonts.poppins(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 8, height: 8,
+                                      decoration: BoxDecoration(color: webFigEnabled ? const Color(0xFF34A853) : const Color(0xFFFF5252), shape: BoxShape.circle),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      webFigEnabled ? 'Running on Port $webFigPort' : 'Stopped (Port $webFigPort)',
+                                      style: GoogleFonts.poppins(color: webFigEnabled ? const Color(0xFF34A853) : const Color(0xFFFF5252), fontSize: 12, fontWeight: FontWeight.w500),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () {
+                                        showEditPortDialog(webFigPort, (newPort) {
+                                          setStateDialog(() => webFigPort = newPort);
+                                        });
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                                        child: const Icon(Icons.edit_rounded, color: Colors.white70, size: 14),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          isSavingWebFig
+                              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Color(0xFF00BFFF), strokeWidth: 2))
+                              : Switch(
+                                  value: webFigEnabled,
+                                  activeColor: const Color(0xFF00BFFF),
+                                  onChanged: (val) async {
+                                    setStateDialog(() => isSavingWebFig = true);
+                                    try {
+                                      await widget.service.setWebFigEnabled(val);
+                                      if (mounted) setStateDialog(() => webFigEnabled = val);
+                                    } catch (e) {
+                                      if (mounted) TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
+                                    } finally {
+                                      if (mounted) setStateDialog(() => isSavingWebFig = false);
+                                    }
+                                  },
+                                ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text('Quick Guide', style: GoogleFonts.poppins(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    _buildGuideStep('1', 'Access WebFig', 'Copy your DNS Name and paste it into a web browser. Add your port to the end if it is not 80 (e.g., your-dns-name.net:8080). Log in with your admin credentials.'),
+                    const SizedBox(height: 16),
+                    _buildGuideStep('2', 'CGNAT Warning', 'If your ISP uses CGNAT (private WAN IP), DDNS won\'t work. You must use a VPN like ZeroTier.'),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00BFFF), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                        child: Text('Close', style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildGuideStep(String number, String title, String desc) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24, height: 24,
+          decoration: const BoxDecoration(color: Color(0xFF00BFFF), shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: Text(number, style: GoogleFonts.poppins(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: GoogleFonts.poppins(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(desc, style: GoogleFonts.poppins(color: Colors.white60, fontSize: 12, height: 1.4)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = AuthService.instance.currentUser;
+    final isAdmin = AuthService.isAdmin(currentUser?.email);
     return Scaffold(
       backgroundColor: const Color(0xFF050510),
       body: Stack(
@@ -1964,6 +2286,22 @@ class _DashboardScreenState extends State<DashboardScreen>
                               }
                             }
                           ),
+                          if (isAdmin || _remoteConfigUnlocked)
+                            _buildActionItem(
+                              icon: Icons.router_rounded,
+                              label: 'Remote\nConfig',
+                              gradient: const [Color(0xFFFF5252), Color(0xFFD32F2F)],
+                              onTap: _showRemoteConfigGuide,
+                            )
+                          else
+                            _buildActionItem(
+                              icon: Icons.lock_outline_rounded,
+                              label: 'Config\nLocked',
+                              gradient: const [Color(0xFF757575), Color(0xFF424242)],
+                              onTap: () {
+                                TopToast.show(context, 'Remote Config is currently locked by the Admin', backgroundColor: const Color(0xFFF57C00));
+                              },
+                            ),
                         ]),
                       ),
                           const SizedBox(height: 40),

@@ -318,6 +318,10 @@ class MikrotikService {
           final key = word.substring(1, eq);
           final val = word.substring(eq + 1);
           map[key] = val;
+        } else {
+          // Flag parameter without value (e.g. =disabled)
+          final key = word.substring(1);
+          map[key] = 'true';
         }
       }
     }
@@ -1436,6 +1440,95 @@ class MikrotikService {
           await _readResponse();
         }
       } catch (_) {}
+    });
+  }
+
+  // ─── DDNS (IP Cloud) Management ──────────────────────────────────────────
+
+  Future<Map<String, String>> getCloudStatus() async {
+    return _execute(() async {
+      _send(['/ip/cloud/print']);
+      final reply = await _readResponse();
+      final trap = _getTrapData(reply);
+      if (trap != null) return {};
+      final reTag = reply.firstWhere((s) => s.isNotEmpty && s[0] == '!re', orElse: () => <String>[]);
+      if (reTag.isNotEmpty) {
+        return _parseWords(reTag);
+      }
+      return {};
+    });
+  }
+
+  Future<void> setDdnsEnabled(bool enabled) async {
+    return _execute(() async {
+      _send([
+        '/ip/cloud/set',
+        '=ddns-enabled=${enabled ? "yes" : "no"}'
+      ]);
+      final reply = await _readResponse();
+      final trap = _getTrapData(reply);
+      if (trap != null) {
+        final msg = trap['message']?.toLowerCase() ?? '';
+        if (!enabled && msg.contains('auto')) {
+          _send([
+            '/ip/cloud/set',
+            '=ddns-enabled=auto'
+          ]);
+          final retryReply = await _readResponse();
+          final retryTrap = _getTrapData(retryReply);
+          if (retryTrap != null) {
+            throw Exception(retryTrap['message'] ?? 'Failed to update DDNS');
+          }
+          return;
+        }
+        throw Exception(trap['message'] ?? 'Failed to update DDNS');
+      }
+    });
+  }
+
+  // ─── WebFig (www) Service Management ─────────────────────────────────────
+
+  Future<Map<String, String>> getWebFigStatus() async {
+    return _execute(() async {
+      _send(['/ip/service/print', '=?name=www']);
+      final reply = await _readResponse();
+      final trap = _getTrapData(reply);
+      if (trap != null) return {};
+      final reTag = reply.firstWhere((s) => s.isNotEmpty && s[0] == '!re', orElse: () => <String>[]);
+      if (reTag.isNotEmpty) {
+        return _parseWords(reTag);
+      }
+      return {};
+    });
+  }
+
+  Future<void> setWebFigEnabled(bool enabled) async {
+    return _execute(() async {
+      _send([
+        '/ip/service/set',
+        '=disabled=${enabled ? "no" : "yes"}',
+        '=.id=www'
+      ]);
+      final reply = await _readResponse();
+      final trap = _getTrapData(reply);
+      if (trap != null) {
+        throw Exception(trap['message'] ?? 'Failed to update WebFig service');
+      }
+    });
+  }
+
+  Future<void> setWebFigPort(String port) async {
+    return _execute(() async {
+      _send([
+        '/ip/service/set',
+        '=port=$port',
+        '=.id=www'
+      ]);
+      final reply = await _readResponse();
+      final trap = _getTrapData(reply);
+      if (trap != null) {
+        throw Exception(trap['message'] ?? 'Failed to update WebFig port');
+      }
     });
   }
 }
