@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import '../services/voucher_pdf_service.dart';
+import '../services/trial_service.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import '../models/voucher.dart';
@@ -25,6 +26,11 @@ void showVoucherPrintPreview(
   final footerNoteCtrl =
       TextEditingController(text: 'ENJOY @ JOEMIA CAFE');
   
+  bool isProUser = false;
+  TrialService.isPro().then((pro) {
+    isProUser = pro;
+  });
+
   final customWidthCtrl = TextEditingController(text: '21.0');
   final customHeightCtrl = TextEditingController(text: '29.7');
   
@@ -400,6 +406,19 @@ void showVoucherPrintPreview(
                                 .toList(),
                             onChanged: (template) {
                               if (template != null) {
+                                if (template == VoucherTemplate.premium && !isProUser) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Premium Split template is only available for Pro subscribers.',
+                                        style: GoogleFonts.poppins(),
+                                      ),
+                                      backgroundColor: Colors.orange,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                  return;
+                                }
                                 setPreviewState(() {
                                   selectedTemplate = template;
                                 });

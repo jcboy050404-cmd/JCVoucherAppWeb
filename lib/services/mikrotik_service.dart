@@ -1353,6 +1353,31 @@ class MikrotikService {
     });
   }
 
+  /// Removes a trial script flag (`va_trial_$hash`) from the connected MikroTik router.
+  Future<void> removeRouterTrialFlag(String email) async {
+    return _execute(() async {
+      try {
+        final hash = _emailHash(email);
+        final targetName = 'va_trial_$hash';
+        _send(['/system/script/print']);
+        final response = await _readResponse();
+        for (final sentence in response) {
+          if (sentence.isNotEmpty && sentence[0] == '!re') {
+            final data = _parseWords(sentence);
+            if (data['name'] == targetName) {
+              final id = data['.id'];
+              if (id != null) {
+                _send(['/system/script/remove', '=.id=$id']);
+                await _readResponse();
+              }
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
   /// Checks if a PRO unlock flag for [email] exists on the connected MikroTik router.
   /// Script name is HMAC-SHA256 hashed — email is never stored in plain text.
   Future<bool> checkRouterProFlag(String email) async {

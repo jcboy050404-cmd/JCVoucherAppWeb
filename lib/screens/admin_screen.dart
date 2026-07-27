@@ -321,6 +321,9 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       if (type == 'trial') {
         await CloudSyncService.saveUserState(email, pro: false, proExpiresAt: '');
+      } else if (type == 'trial_reset') {
+        await TrialService.resetTrial(email);
+        await CloudSyncService.saveUserState(email, pro: false, proExpiresAt: '');
       } else if (type == 'lifetime') {
         await CloudSyncService.saveUserState(email, pro: true, proExpiresAt: '');
       } else if (type == 'monthly') {
@@ -753,6 +756,11 @@ class _AdminScreenState extends State<AdminScreen> {
                     value: 'trial',
                     child: Text('Set to Free/Trial', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13)),
                   ),
+                  if (isTrial)
+                    PopupMenuItem(
+                      value: 'trial_reset',
+                      child: Text('Reset Free Trial', style: GoogleFonts.poppins(color: const Color(0xFFFFB74D), fontSize: 13)),
+                    ),
                   PopupMenuItem(
                     value: 'monthly',
                     child: Text('Set to PRO (Monthly)', style: GoogleFonts.poppins(color: Colors.white, fontSize: 13)),

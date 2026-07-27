@@ -32,6 +32,26 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    applicationVariants.all {
+        val variant = this
+        variant.outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            output.outputFileName = "Voucherapp_v${variant.versionName}.apk"
+        }
+
+        variant.assembleProvider.get().doLast {
+            variant.outputs.forEach { output ->
+                val apkFile = output.outputFile
+                if (apkFile != null && apkFile.exists()) {
+                    copy {
+                        from(apkFile)
+                        into(file("C:/Users/jccel/Videos/website/downloads"))
+                    }
+                }
+            }
+        }
+    }
 }
 
 kotlin {

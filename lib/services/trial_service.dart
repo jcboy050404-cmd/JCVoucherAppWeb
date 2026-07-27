@@ -163,7 +163,34 @@ class TrialService {
           }
         }
       }
+
+      // Sync Trial flag
+      final cloudTrialUsed = cloudData['trial_used'] == true;
+      final localTrialUsed = prefs.getBool('$_trialPrefix$userEmail') ?? false;
+      
+      if (!cloudTrialUsed && localTrialUsed) {
+        // Admin has reset the trial in the cloud, so clear it locally
+        await prefs.remove('$_trialPrefix$userEmail');
+        if (service != null && service.isConnected) {
+          await service.removeRouterTrialFlag(userEmail);
+        }
+      }
     }
+  }
+
+  /// Resets the free trial for a specific [email] (admin utility).
+  static Future<void> resetTrial([String? email, MikrotikService? service]) async {
+    final userEmail = getEmail(email);
+    if (userEmail.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_trialPrefix$userEmail');
+
+    if (service != null && service.isConnected) {
+      await service.removeRouterTrialFlag(userEmail);
+    }
+
+    await CloudSyncService.saveUserState(userEmail, trialUsed: false);
   }
 
   /// Returns true if the user has already used their 1-time free trial voucher generation.
