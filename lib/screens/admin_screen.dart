@@ -207,6 +207,11 @@ class _AdminScreenState extends State<AdminScreen> {
       _allRequests.where((r) => r['status'] == 'pending').length;
   int get _approvedCount =>
       _allRequests.where((r) => r['status'] == 'approved').length;
+  double get _totalRevenue {
+    return _allRequests
+        .where((r) => r['status'] == 'approved')
+        .fold(0.0, (sum, r) => sum + (double.tryParse(r['amount']?.toString() ?? '0') ?? 0.0));
+  }
 
   Future<void> _approveRequest(String refNumber, String email, String plan) async {
     final success =
@@ -223,6 +228,38 @@ class _AdminScreenState extends State<AdminScreen> {
       TopToast.show(context, 'Rejected request $refNumber', backgroundColor: const Color(0xFFFF5252));
       _loadAllRequests();
     _loadAllUsers();
+    }
+  }
+
+  Future<void> _deleteHistoryRequest(String refNumber) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: Text('Delete History?', style: GoogleFonts.poppins(color: Colors.white)),
+        content: Text('Are you sure you want to delete this payment request history?', style: GoogleFonts.poppins(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('CANCEL', style: GoogleFonts.poppins(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF5252)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('DELETE', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final success = await CloudSyncService.deletePaymentRequest(refNumber);
+      if (success && mounted) {
+        TopToast.show(context, 'Deleted history $refNumber', backgroundColor: const Color(0xFF34A853));
+        _loadAllRequests();
+      } else if (mounted) {
+        TopToast.show(context, 'Failed to delete history', backgroundColor: const Color(0xFFFF5252));
+      }
     }
   }
 
@@ -793,7 +830,7 @@ class _AdminScreenState extends State<AdminScreen> {
         Expanded(
           child: _buildStatTile(
             title: 'Revenue',
-            value: '₱${_approvedCount * 1}',
+            value: '₱${_totalRevenue.toStringAsFixed(0)}',
             color: const Color(0xFF00BFFF),
             icon: Icons.payments_rounded,
           ),
@@ -1877,6 +1914,19 @@ class _AdminScreenState extends State<AdminScreen> {
                   ),
                 ),
               ],
+            ),
+          ] else ...[
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _deleteHistoryRequest(refNo),
+                icon: const Icon(Icons.delete_outline_rounded, color: Colors.white54, size: 16),
+                label: Text(
+                  'Delete History',
+                  style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12),
+                ),
+              ),
             ),
           ],
         ],

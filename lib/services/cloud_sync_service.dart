@@ -384,6 +384,21 @@ class CloudSyncService {
     }
   }
 
+  /// Deletes a payment request history by refNumber.
+  static Future<bool> deletePaymentRequest(String refNumber) async {
+    final cleanRef = refNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanRef.isEmpty) return false;
+
+    try {
+      final url = Uri.parse(_auth('$_paymentReqUrl/$cleanRef.json'));
+      final response = await http.delete(url).timeout(const Duration(seconds: 4));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('CloudSyncService: Delete payment error: $e');
+      return false;
+    }
+  }
+
   /// Save GCash payment config (number, name, qr_url) to Cloud DB
   static Future<bool> saveGCashSettings({
     required String gcashNumber,

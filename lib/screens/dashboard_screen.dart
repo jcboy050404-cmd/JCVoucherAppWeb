@@ -184,6 +184,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     }).fold(0.0, (sum, v) => sum + v.price);
   }
 
+  double get _totalSales {
+    return _vouchers
+        .where((v) => v.isUsed)
+        .fold(0.0, (sum, v) => sum + v.price);
+  }
+
   List<String> get _availableProfiles {
     final set = <String>{'all'};
     for (final v in _vouchers) {
@@ -1805,6 +1811,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                             icon: Icons.calendar_month_rounded,
                             color: const Color(0xFF00BFFF),
                             subtitle: 'This month sales',
+                          ),
+                          StatCard(
+                            title: 'Total Income',
+                            value: '₱${_totalSales.toStringAsFixed(0)}',
+                            icon: Icons.account_balance_wallet_rounded,
+                            color: const Color(0xFF9C27B0),
+                            subtitle: 'All active sales',
                           ),
                         ]),
                       ),
