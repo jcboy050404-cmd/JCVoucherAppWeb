@@ -42,11 +42,11 @@ class MikrotikVendoDriver implements BaseVendoService {
       double sales = 0.0;
       for (final v in vouchers) {
         if (!v.isUsed) continue;
-        final cd = v.createdDate;
-        if (cd != null &&
-            cd.year == now.year &&
-            cd.month == now.month &&
-            cd.day == now.day) {
+        final act = v.activationDate;
+        if (act != null &&
+            act.year == now.year &&
+            act.month == now.month &&
+            act.day == now.day) {
           sales += v.price;
         }
       }

@@ -853,15 +853,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                     try {
                       await widget.service.setWebFigPort(newPort);
                       onPortChanged(newPort);
-                      if (mounted) {
-                        Navigator.pop(ctx);
-                        TopToast.show(context, 'Port updated!', backgroundColor: const Color(0xFF34A853));
-                      }
+                      if (!mounted) return;
+                      Navigator.pop(ctx);
+                      TopToast.show(context, 'Port updated!', backgroundColor: const Color(0xFF34A853));
                     } catch (e) {
-                      if (mounted) {
-                        setDialogState(() => isSaving = false);
-                        TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
-                      }
+                      if (!mounted) return;
+                      setDialogState(() => isSaving = false);
+                      TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
                     }
                   },
                   child: Text('Save', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
@@ -974,7 +972,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                                         if (mounted) setStateDialog(() { ddnsEnabled = false; dnsName = ''; });
                                       }
                                     } catch (e) {
-                                      if (mounted) TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
+                                      if (!mounted) return;
+                                      TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
                                     } finally {
                                       if (mounted) setStateDialog(() => isSavingDDNS = false);
                                     }
@@ -1036,7 +1035,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                                       await widget.service.setWebFigEnabled(val);
                                       if (mounted) setStateDialog(() => webFigEnabled = val);
                                     } catch (e) {
-                                      if (mounted) TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
+                                      if (!mounted) return;
+                                      TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
                                     } finally {
                                       if (mounted) setStateDialog(() => isSavingWebFig = false);
                                     }

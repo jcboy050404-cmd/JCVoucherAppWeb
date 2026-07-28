@@ -34,7 +34,7 @@ void showVoucherPrintPreview(
   final customWidthCtrl = TextEditingController(text: '21.0');
   final customHeightCtrl = TextEditingController(text: '29.7');
   
-  Uint8List? _logoBytes;
+  Uint8List? logoBytes;
   
   final Map<Color, PdfColor> templateColors = {
     const Color(0xFF4CAF50): PdfColors.green,
@@ -53,7 +53,7 @@ void showVoucherPrintPreview(
     builder: (ctx) {
       return StatefulBuilder(
         builder: (context, setPreviewState) {
-          void _openCustomizerModal() {
+          void openCustomizerModal() {
             showDialog(
               context: context,
               builder: (ctx) {
@@ -119,7 +119,7 @@ void showVoucherPrintPreview(
                                       child: OutlinedButton.icon(
                                         icon: const Icon(Icons.image, size: 16),
                                         label: Text(
-                                          _logoBytes == null ? 'Upload Logo' : 'Change Logo',
+                                          logoBytes == null ? 'Upload Logo' : 'Change Logo',
                                           style: GoogleFonts.poppins(fontSize: 11),
                                         ),
                                         style: OutlinedButton.styleFrom(
@@ -133,19 +133,19 @@ void showVoucherPrintPreview(
                                           if (pickedFile != null) {
                                             final bytes = await pickedFile.readAsBytes();
                                             updateStates(() {
-                                              _logoBytes = bytes;
+                                              logoBytes = bytes;
                                             });
                                           }
                                         },
                                       ),
                                     ),
-                                    if (_logoBytes != null) ...[
+                                    if (logoBytes != null) ...[
                                       const SizedBox(width: 8),
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
                                         onPressed: () {
                                           updateStates(() {
-                                            _logoBytes = null;
+                                            logoBytes = null;
                                           });
                                         },
                                       )
@@ -366,7 +366,7 @@ void showVoucherPrintPreview(
                           ),
                           if (selectedTemplate != VoucherTemplate.standard)
                             GestureDetector(
-                              onTap: _openCustomizerModal,
+                              onTap: openCustomizerModal,
                               child: Text(
                                 '✏️ Customize Fields',
                                 style: GoogleFonts.poppins(
@@ -446,7 +446,7 @@ void showVoucherPrintPreview(
                         footerNoteCtrl.text,
                         customWidthCtrl.text,
                         customHeightCtrl.text,
-                        _logoBytes,
+                        logoBytes,
                         selectedColor.toARGB32(),
                       )),
                       build: (format) {
@@ -471,7 +471,7 @@ void showVoucherPrintPreview(
                               ? footerNoteCtrl.text
                               : 'ENJOY @ JOEMIA CAFE',
                           customFormat: customFormat,
-                          logoBytes: _logoBytes,
+                          logoBytes: logoBytes,
                           primaryColor: templateColors[selectedColor],
                         );
                       },
@@ -515,7 +515,7 @@ void showVoucherPrintPreview(
                               loginUrl: loginUrlCtrl.text,
                               footerNote: footerNoteCtrl.text,
                               customFormat: customFormat,
-                              logoBytes: _logoBytes,
+                              logoBytes: logoBytes,
                               primaryColor: templateColors[selectedColor],
                             );
                             await Printing.sharePdf(
@@ -581,7 +581,7 @@ void showVoucherPrintPreview(
                                 loginUrl: loginUrlCtrl.text,
                                 footerNote: footerNoteCtrl.text,
                                 customFormat: customFormat,
-                                logoBytes: _logoBytes,
+                                logoBytes: logoBytes,
                                 primaryColor: templateColors[selectedColor],
                               ),
                               name:
@@ -694,3 +694,4 @@ class _PreviewEditorField extends StatelessWidget {
     );
   }
 }
+

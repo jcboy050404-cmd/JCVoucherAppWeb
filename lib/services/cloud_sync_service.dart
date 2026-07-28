@@ -32,7 +32,7 @@ class CloudSyncService {
   static String get _dbSecret => dotenv.env['FIREBASE_DB_SECRET'] ?? '';
 
   /// Appends the auth secret to any Firebase REST URL path.
-  static String _auth(String path) => '$_dbSecret'.isEmpty ? path : '$path?auth=$_dbSecret';
+  static String _auth(String path) => _dbSecret.isEmpty ? path : '$path?auth=$_dbSecret';
 
   static String _cleanEmail(String email) {
     return email.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_').toLowerCase();
