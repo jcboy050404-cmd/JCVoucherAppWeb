@@ -46,6 +46,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   String? _proExpiresAt;
   bool _pppoeUnlocked = false;
   bool _remoteConfigUnlocked = false;
+  bool _fileManagerUnlocked = false;
 
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
@@ -110,6 +111,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _proExpiresAt = proExpiresAt;
         _pppoeUnlocked = settings['pppoe_unlocked'] == true;
         _remoteConfigUnlocked = settings['remote_config_unlocked'] == true;
+        _fileManagerUnlocked = settings['file_manager_unlocked'] == true;
         _loading = false;
       });
       _fadeCtrl.forward(from: 0);
@@ -1690,15 +1692,31 @@ class _DashboardScreenState extends State<DashboardScreen>
                               _loadData();
                             },
                           ),
-                          _buildActionItem(
-                            icon: Icons.folder_open_rounded,
-                            label: 'File\nManager',
-                            gradient: const [Color(0xFFE91E63), Color(0xFFC2185B)],
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => MikrotikFileExplorerScreen(service: widget.service)),
-                              );
-                            },
+                          Builder(
+                            builder: (context) {
+                              final isAdmin = AuthService.instance.currentUser?.isAdmin == true;
+                              if (isAdmin || _fileManagerUnlocked) {
+                                return _buildActionItem(
+                                  icon: Icons.folder_open_rounded,
+                                  label: 'File\nManager',
+                                  gradient: const [Color(0xFFE91E63), Color(0xFFC2185B)],
+                                  onTap: () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => MikrotikFileExplorerScreen(service: widget.service)),
+                                    );
+                                  },
+                                );
+                              } else {
+                                return _buildActionItem(
+                                  icon: Icons.lock_outline_rounded,
+                                  label: 'File\nLocked',
+                                  gradient: const [Color(0xFF757575), Color(0xFF424242)],
+                                  onTap: () {
+                                    TopToast.show(context, 'File Manager is currently locked by the Admin', backgroundColor: const Color(0xFFF57C00));
+                                  },
+                                );
+                              }
+                            }
                           ),
                           _buildActionItem(
                             icon: Icons.wifi_tethering_rounded,

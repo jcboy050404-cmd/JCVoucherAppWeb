@@ -33,7 +33,7 @@ class Voucher {
       profile: map['profile'] ?? 'default',
       comment: map['comment'] ?? '',
       limitUptime: map['limit-uptime'] ?? '',
-      limitBytes: map['limit-bytes-total'] ?? '',
+      limitBytes: map['limit-bytes-total'] ?? map['limit-bytes-out'] ?? '',
       bytesIn: map['bytes-in'] ?? '0',
       bytesOut: map['bytes-out'] ?? '0',
       disabled: map['disabled'] == 'true',
@@ -205,7 +205,7 @@ class HotspotActive {
       sessionTimeLeft: map['session-time-left'] ?? map['limit-uptime'] ?? '',
       bytesIn: map['bytes-in'] ?? '0',
       bytesOut: map['bytes-out'] ?? '0',
-      limitBytesTotal: map['limit-bytes-total'] ?? map['bytes-total'] ?? '0',
+      limitBytesTotal: map['limit-bytes-total'] ?? map['limit-bytes-out'] ?? map['bytes-total'] ?? '0',
       comment: map['comment'] ?? '',
     );
   }

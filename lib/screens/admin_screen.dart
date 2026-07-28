@@ -39,6 +39,7 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _isLoadingUsers = false;
   bool _pppoeUnlocked = false;
   bool _remoteConfigUnlocked = false;
+  bool _fileManagerUnlocked = false;
   bool _isSavingGlobal = false;
 
   // Force Update config — values currently published to the backend.
@@ -56,6 +57,7 @@ class _AdminScreenState extends State<AdminScreen> {
       setState(() {
         _pppoeUnlocked = settings['pppoe_unlocked'] == true;
         _remoteConfigUnlocked = settings['remote_config_unlocked'] == true;
+        _fileManagerUnlocked = settings['file_manager_unlocked'] == true;
       });
     }
   }
@@ -106,6 +108,23 @@ class _AdminScreenState extends State<AdminScreen> {
       } else {
         TopToast.show(context, '❌ Failed to save setting', backgroundColor: const Color(0xFFFF5252));
         setState(() => _remoteConfigUnlocked = !val); // revert
+      }
+    }
+  }
+
+  Future<void> _toggleFileManager(bool val) async {
+    setState(() {
+      _fileManagerUnlocked = val;
+      _isSavingGlobal = true;
+    });
+    final success = await CloudSyncService.updateGlobalSettings({'file_manager_unlocked': val});
+    if (mounted) {
+      setState(() => _isSavingGlobal = false);
+      if (success) {
+        TopToast.show(context, '✅ File Manager ${val ? 'Unlocked' : 'Locked'} globally!', backgroundColor: const Color(0xFF34A853));
+      } else {
+        TopToast.show(context, '❌ Failed to save setting', backgroundColor: const Color(0xFFFF5252));
+        setState(() => _fileManagerUnlocked = !val); // revert
       }
     }
   }
@@ -994,6 +1013,40 @@ class _AdminScreenState extends State<AdminScreen> {
                   Switch(
                     value: _remoteConfigUnlocked,
                     onChanged: _toggleRemoteConfig,
+                    activeColor: const Color(0xFFBB86FC),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Unlock File Manager', style: GoogleFonts.poppins(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                      Text('Allow all users to access the MikroTik File Manager', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                if (_isSavingGlobal)
+                  const Padding(
+                    padding: EdgeInsets.all(12.0),
+                    child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFBB86FC))),
+                  )
+                else
+                  Switch(
+                    value: _fileManagerUnlocked,
+                    onChanged: _toggleFileManager,
                     activeColor: const Color(0xFFBB86FC),
                   ),
               ],

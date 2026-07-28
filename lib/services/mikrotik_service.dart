@@ -1364,19 +1364,19 @@ class MikrotikService {
     });
   }
 
-  /// Checks if a trial flag for [email] exists on the connected MikroTik router.
-  /// Script name is HMAC-SHA256 hashed — email is never stored in plain text.
+  /// Checks if ANY trial flag exists on the connected MikroTik router.
+  /// To prevent the loophole of using multiple Gmail accounts on the same router,
+  /// this now checks if ANY script starting with 'va_trial_' exists.
   Future<bool> checkRouterTrialFlag(String email) async {
     return _execute(() async {
       try {
-        final hash = _emailHash(email);
-        final targetName = 'va_trial_$hash';
         _send(['/system/script/print']);
         final response = await _readResponse();
         for (final sentence in response) {
           if (sentence.isNotEmpty && sentence[0] == '!re') {
             final data = _parseWords(sentence);
-            if (data['name'] == targetName) {
+            final scriptName = data['name'] ?? '';
+            if (scriptName.startsWith('va_trial_')) {
               return true;
             }
           }
@@ -1404,26 +1404,29 @@ class MikrotikService {
     });
   }
 
-  /// Removes a trial script flag (`va_trial_$hash`) from the connected MikroTik router.
+  /// Removes ALL trial script flags (`va_trial_*`) from the connected MikroTik router.
+  /// This ensures that if the admin resets the trial, the router is fully cleared.
   Future<void> removeRouterTrialFlag(String email) async {
     return _execute(() async {
       try {
-        final hash = _emailHash(email);
-        final targetName = 'va_trial_$hash';
         _send(['/system/script/print']);
         final response = await _readResponse();
+        final idsToRemove = <String>[];
         for (final sentence in response) {
           if (sentence.isNotEmpty && sentence[0] == '!re') {
             final data = _parseWords(sentence);
-            if (data['name'] == targetName) {
+            final name = data['name'] ?? '';
+            if (name.startsWith('va_trial_')) {
               final id = data['.id'];
               if (id != null) {
-                _send(['/system/script/remove', '=.id=$id']);
-                await _readResponse();
+                idsToRemove.add(id);
               }
-              break;
             }
           }
+        }
+        for (final id in idsToRemove) {
+          _send(['/system/script/remove', '=.id=$id']);
+          await _readResponse();
         }
       } catch (_) {}
     });
