@@ -234,6 +234,20 @@ class _LoginScreenState extends State<LoginScreen>
               children: [
                 TextButton(
                   onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: const Color(0xFF141426),
+                        title: Text('Forgot PIN', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+                        content: Text('Please contact the app developer or administrator to reset your Admin PIN.', style: GoogleFonts.poppins(color: Colors.white70)),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: Text('OK', style: GoogleFonts.poppins(color: const Color(0xFF00BFFF))),
+                          ),
+                        ],
+                      ),
+                    );
                   },
                   child: Text('Forgot PIN?', style: GoogleFonts.poppins(color: const Color(0xFF00BFFF), fontSize: 12, decoration: TextDecoration.underline), textAlign: TextAlign.center),
                 ),
@@ -323,6 +337,7 @@ class _LoginScreenState extends State<LoginScreen>
           if (saved) {
             pinSuccess = true;
           } else {
+            if (mounted) TopToast.show(context, 'Failed to save PIN. Please check your internet connection.', backgroundColor: Colors.redAccent);
           }
         }
       }
@@ -397,6 +412,7 @@ class _LoginScreenState extends State<LoginScreen>
         if (saved) {
           pinSuccess = true;
         } else {
+          if (mounted) TopToast.show(context, 'Failed to save PIN. Please check your internet connection.', backgroundColor: Colors.redAccent);
         }
       }
     }

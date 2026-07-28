@@ -36,6 +36,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen>
     with TickerProviderStateMixin, RouteAware {
   bool _loading = true;
+  bool _isLoadingData = false;
   List<Voucher> _vouchers = [];
   List<HotspotActive> _activeSessions = [];
   String? _error;
@@ -87,6 +88,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Future<void> _loadData() async {
+    if (_isLoadingData) return;
+    _isLoadingData = true;
     setState(() {
       _loading = true;
       _error = null;
@@ -141,6 +144,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         _error = e.toString().replaceFirst('Exception: ', '');
         _loading = false;
       });
+    } finally {
+      _isLoadingData = false;
     }
   }
 

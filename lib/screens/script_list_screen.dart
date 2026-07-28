@@ -242,6 +242,7 @@ class _ScriptListScreenState extends State<ScriptListScreen> {
     try {
       await widget.service.removeScript(script.id);
       if (!mounted) return;
+      TopToast.show(context, 'Script deleted successfully', backgroundColor: const Color(0xFF00E676));
       _loadScripts();
     } catch (e) {
       if (!mounted) return;
