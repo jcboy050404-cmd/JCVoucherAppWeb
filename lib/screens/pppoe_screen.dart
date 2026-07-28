@@ -184,6 +184,7 @@ class _PppoeScreenState extends State<PppoeScreen>
     );
 
     if (confirm == true) {
+      if (!mounted) return;
       setState(() => _isLoading = true);
       int disabledCount = 0;
       for (final user in overdueList) {

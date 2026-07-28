@@ -405,7 +405,7 @@ class _PaymentRedirectScreenState extends State<PaymentRedirectScreen> {
     } catch (e) {
       _snack('Error: ${e.toString().replaceFirst('Exception: ', '')}', isError: true);
     } finally {
-      setState(() => _isBusy = false);
+      if (mounted) setState(() => _isBusy = false);
     }
   }
 
