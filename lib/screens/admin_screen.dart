@@ -8,7 +8,7 @@ import '../services/cloud_sync_service.dart';
 import '../services/trial_service.dart';
 import '../services/auth_service.dart';
 import '../services/force_update_service.dart';
-import '../responsive.dart';
+
 
 
 class AdminScreen extends StatefulWidget {
@@ -979,7 +979,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   Switch(
                     value: _pppoeUnlocked,
                     onChanged: _togglePppoe,
-                    activeColor: const Color(0xFFBB86FC),
+                    activeThumbColor: const Color(0xFFBB86FC),
                   ),
               ],
             ),
@@ -1013,7 +1013,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   Switch(
                     value: _remoteConfigUnlocked,
                     onChanged: _toggleRemoteConfig,
-                    activeColor: const Color(0xFFBB86FC),
+                    activeThumbColor: const Color(0xFFBB86FC),
                   ),
               ],
             ),
@@ -1047,7 +1047,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   Switch(
                     value: _fileManagerUnlocked,
                     onChanged: _toggleFileManager,
-                    activeColor: const Color(0xFFBB86FC),
+                    activeThumbColor: const Color(0xFFBB86FC),
                   ),
               ],
             ),
