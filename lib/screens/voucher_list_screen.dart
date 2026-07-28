@@ -45,8 +45,6 @@ class _VoucherListScreenState extends State<VoucherListScreen>
   bool _multiSelect = false;
 
   // Cached computed lists — rebuilt only when _all changes
-  List<String> _cachedProfiles = ['all'];
-  List<String> _cachedPrices = ['all'];
   List<String> _cachedBatches = ['all'];
 
   late AnimationController _listCtrl;
@@ -66,22 +64,12 @@ class _VoucherListScreenState extends State<VoucherListScreen>
   // duplicate didPopNext → duplicate reloads per navigation.
   bool _subscribedToRouteObserver = false;
 
-  List<String> get _availableProfiles => _cachedProfiles;
-  List<String> get _availablePrices => _cachedPrices;
   List<String> get _availableBatches => _cachedBatches;
 
   void _rebuildCaches() {
-    final profiles = <String>{'all'};
-    final prices = <String>{'all'};
     final batches = <String>{'all'};
     final batchRe = RegExp(r'Date:(\d{4}-\d{2}-\d{2})');
     for (final v in _all) {
-      if (v.profile.isNotEmpty) profiles.add(v.profile);
-      if (v.price > 0) {
-        prices.add('₱${v.price.toStringAsFixed(0)}');
-      } else {
-        prices.add('Free');
-      }
       final bMatch = batchRe.firstMatch(v.comment);
       if (bMatch != null) {
         batches.add(bMatch.group(1)!);
@@ -90,8 +78,6 @@ class _VoucherListScreenState extends State<VoucherListScreen>
         if (firstPart.isNotEmpty) batches.add(firstPart);
       }
     }
-    _cachedProfiles = profiles.toList();
-    _cachedPrices = prices.toList();
     _cachedBatches = batches.toList();
 
     // If the currently selected batch filter no longer exists (e.g. all

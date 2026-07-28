@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../services/mikrotik_service.dart';
-import '../services/voucher_pdf_service.dart';
 import '../services/trial_service.dart';
 import '../services/auth_service.dart';
 import '../services/cloud_sync_service.dart';
@@ -199,25 +197,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         .fold(0.0, (sum, v) => sum + v.price);
   }
 
-  List<String> get _availableProfiles {
-    final set = <String>{'all'};
-    for (final v in _vouchers) {
-      if (v.profile.isNotEmpty) set.add(v.profile);
-    }
-    return set.toList();
-  }
-
-  List<String> get _availablePrices {
-    final set = <String>{'all'};
-    for (final v in _vouchers) {
-      if (v.price > 0) {
-        set.add('₱${v.price.toStringAsFixed(0)}');
-      } else {
-        set.add('Free');
-      }
-    }
-    return set.toList();
-  }
 
   List<String> get _availableBatches {
     final set = <String>{'all'};
@@ -975,7 +954,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                               ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Color(0xFF00BFFF), strokeWidth: 2))
                               : Switch(
                                   value: ddnsEnabled,
-                                  activeColor: const Color(0xFF00BFFF),
+                                  activeThumbColor: const Color(0xFF00BFFF),
                                   onChanged: (val) async {
                                     setStateDialog(() => isSavingDDNS = true);
                                     try {
@@ -1050,7 +1029,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                               ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Color(0xFF00BFFF), strokeWidth: 2))
                               : Switch(
                                   value: webFigEnabled,
-                                  activeColor: const Color(0xFF00BFFF),
+                                  activeThumbColor: const Color(0xFF00E676),
                                   onChanged: (val) async {
                                     setStateDialog(() => isSavingWebFig = true);
                                     try {

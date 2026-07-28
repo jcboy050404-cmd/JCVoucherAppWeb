@@ -54,7 +54,7 @@ class _MikrotikFileExplorerScreenState extends State<MikrotikFileExplorerScreen>
     if (_currentPath.length == 1) return '';
     // e.g. ['/', 'hotspot'] -> 'hotspot/'
     // ['/', 'hotspot', 'img'] -> 'hotspot/img/'
-    return _currentPath.sublist(1).join('/') + '/';
+    return '${_currentPath.sublist(1).join('/')}/';
   }
 
   List<RouterFile> get _currentFiles {
@@ -116,12 +116,16 @@ class _MikrotikFileExplorerScreenState extends State<MikrotikFileExplorerScreen>
 
     if (confirm == true) {
       setState(() => _isLoading = true);
+      if (!mounted) return;
+      final ctx = context;
       try {
         await widget.service.deleteFile(file.id);
-        TopToast.show(context, 'File deleted successfully', backgroundColor: const Color(0xFF00E676));
+        if (!mounted) return;
+        TopToast.show(ctx, 'File deleted successfully', backgroundColor: const Color(0xFF00E676));
         await _loadFiles();
       } catch (e) {
-        TopToast.show(context, 'Error deleting file: $e', backgroundColor: const Color(0xFFFF5252));
+        if (!mounted) return;
+        TopToast.show(ctx, 'Error deleting file: $e', backgroundColor: const Color(0xFFFF5252));
         setState(() => _isLoading = false);
       }
     }

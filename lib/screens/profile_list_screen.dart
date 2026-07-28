@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/mikrotik_service.dart';
 import '../models/user_profile.dart';
-import '../responsive.dart';
 
 class ProfileListScreen extends StatefulWidget {
   final MikrotikService service;
@@ -587,3 +586,4 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
     );
   }
 }
+
