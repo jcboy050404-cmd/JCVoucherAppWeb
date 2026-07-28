@@ -23,6 +23,7 @@ import 'active_vouchers_screen.dart';
 import 'login_screen.dart';
 import 'upgrade_screen.dart';
 import 'pppoe_screen.dart';
+import 'file_explorer_screen.dart';
 import '../widgets/top_toast.dart';
 import '../widgets/print_preview_helper.dart';
 
@@ -1788,6 +1789,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 MaterialPageRoute(builder: (_) => ScriptListScreen(service: widget.service)),
                               );
                               _loadData();
+                            },
+                          ),
+                          _buildActionItem(
+                            icon: Icons.folder_open_rounded,
+                            label: 'File\nManager',
+                            gradient: const [Color(0xFFE91E63), Color(0xFFC2185B)],
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => MikrotikFileExplorerScreen(service: widget.service)),
+                              );
                             },
                           ),
                           _buildActionItem(

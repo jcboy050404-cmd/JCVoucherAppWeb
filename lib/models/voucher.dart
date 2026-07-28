@@ -41,7 +41,16 @@ class Voucher {
     );
   }
 
-  bool get isUsed => bytesIn != '0' || bytesOut != '0';
+  bool get isUsed {
+    final bin = double.tryParse(bytesIn) ?? 0;
+    final bout = double.tryParse(bytesOut) ?? 0;
+    if (bin > 0 || bout > 0) return true;
+    final lower = comment.toLowerCase();
+    if (lower.contains('exp:') || lower.contains('used') || (disabled && lower.contains('expired'))) {
+      return true;
+    }
+    return false;
+  }
 
   String get displayCode => name.toUpperCase();
 
@@ -54,10 +63,22 @@ class Voucher {
   }
 
   double get price {
-    final match = RegExp(r'P:([0-9]+(?:\.[0-9]+)?)').firstMatch(comment);
-    if (match != null) {
-      return double.tryParse(match.group(1)!) ?? 0.0;
-    }
+    // 1. Try strict P: format
+    final matchP = RegExp(r'P:([0-9]+(?:\.[0-9]+)?)').firstMatch(comment);
+    if (matchP != null) return double.tryParse(matchP.group(1)!) ?? 0.0;
+
+    // 2. Try ₱ or Rp format or price: tag
+    final matchSymbol = RegExp(r'(?:₱|Rp\.?|price:?\s*)([0-9]+(?:\.[0-9]+)?)', caseSensitive: false).firstMatch(comment);
+    if (matchSymbol != null) return double.tryParse(matchSymbol.group(1)!) ?? 0.0;
+
+    // 3. If comment is just a number
+    final numVal = double.tryParse(comment.trim());
+    if (numVal != null) return numVal;
+
+    // 4. Try parsing from formattedPrice
+    final fp = double.tryParse(formattedPrice);
+    if (fp != null) return fp;
+
     return 0.0;
   }
 
@@ -86,9 +107,37 @@ class Voucher {
   }
 
   DateTime? get createdDate {
-    final match = RegExp(r'Date:(\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?)').firstMatch(comment);
+    // 1. Explicit Date: tag (supports 1 or 2 digit month/day)
+    final match = RegExp(r'Date:(\d{4}-\d{1,2}-\d{1,2}(?:\s+\d{1,2}:\d{1,2}(?::\d{1,2})?)?)').firstMatch(comment);
     if (match != null) {
       return DateTime.tryParse(match.group(1)!);
+    }
+    
+    // 2. MikroTik exp: tag (e.g. exp:jul/28/2026 or exp:2026-07-28)
+    final expMatch = RegExp(r'exp:([a-zA-Z]{3}/\d{1,2}/\d{4}|\d{4}-\d{1,2}-\d{1,2})').firstMatch(comment);
+    if (expMatch != null) {
+      final dateStr = expMatch.group(1)!;
+      if (dateStr.contains('/')) {
+        // Parse MikroTik format mmm/dd/yyyy
+        final parts = dateStr.split('/');
+        final monthStr = parts[0].toLowerCase();
+        final day = int.tryParse(parts[1]) ?? 1;
+        final year = int.tryParse(parts[2]) ?? 2000;
+        const months = {
+          'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+          'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+        };
+        final month = months[monthStr] ?? 1;
+        return DateTime(year, month, day);
+      } else {
+        return DateTime.tryParse(dateStr);
+      }
+    }
+
+    // 3. Fallback to createdAt
+    if (createdAt.isNotEmpty) {
+      final parsed = DateTime.tryParse(createdAt);
+      if (parsed != null) return parsed;
     }
     return null;
   }

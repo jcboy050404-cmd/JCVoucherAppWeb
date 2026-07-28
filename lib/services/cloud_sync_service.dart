@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 /// Cloud sync service using Firebase REST API for persistent account status.
@@ -9,6 +10,11 @@ import 'package:http/http.dart' as http;
 ///
 /// All requests are authenticated using the Firebase Database Secret so that
 /// the database rules (auth != null) block all unauthenticated public access.
+///
+/// ⚠️ NOTE: The Database Secret is loaded from `.env`, which is still bundled
+/// inside the shipped APK and therefore NOT truly secret. For production,
+/// proxy these calls through Firebase Cloud Functions so the secret stays
+/// on the server. This is an interim measure to remove it from source code.
 class CloudSyncService {
   // Firebase Realtime DB REST endpoint for JC Voucher App project
   static const String _baseUrl =
@@ -21,11 +27,12 @@ class CloudSyncService {
       'https://jc-voucher-app-default-rtdb.asia-southeast1.firebasedatabase.app/settings';
 
   // Firebase Database Secret — used to authenticate all REST requests.
+  // Loaded from .env at runtime (see the security note in .env).
   // Your database rules should be set to: ".read": "auth != null", ".write": "auth != null"
-  static const String _dbSecret = '0esOIUJtoxYkD6OoJHvsaJx3ka03KtOddsNP4Diw';
+  static String get _dbSecret => dotenv.env['FIREBASE_DB_SECRET'] ?? '';
 
   /// Appends the auth secret to any Firebase REST URL path.
-  static String _auth(String path) => '$path?auth=$_dbSecret';
+  static String _auth(String path) => '$_dbSecret'.isEmpty ? path : '$path?auth=$_dbSecret';
 
   static String _cleanEmail(String email) {
     return email.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_').toLowerCase();

@@ -20,6 +20,7 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
   bool _loading = true;
   String? _error;
   final _searchCtrl = TextEditingController();
+  final Set<String> _processingIds = {};
 
   @override
   void initState() {
@@ -69,16 +70,15 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
   }
 
   Future<void> _disconnectUser(HotspotActive active) async {
+    if (_processingIds.contains(active.id)) return;
+    
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161626),
-        title: Text(
-          'Disconnect User',
-          style: GoogleFonts.poppins(color: Colors.white),
-        ),
+        backgroundColor: const Color(0xFF1E1E2E),
+        title: Text('Disconnect User?', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
         content: Text(
-          'Disconnect session for voucher "${active.user}" (${active.address})?',
+          'Disconnect "${active.user}" from the network?',
           style: GoogleFonts.poppins(color: Colors.white70),
         ),
         actions: [
@@ -99,27 +99,29 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
 
     if (confirm != true) return;
 
+    setState(() => _processingIds.add(active.id));
+
     try {
       await widget.service.removeActiveSession(active.id);
       if (!mounted) return;
 
-      // Optimistically remove from UI immediately — no spinner
       setState(() {
         _allActive.removeWhere((a) => a.id == active.id);
+        _processingIds.remove(active.id);
       });
       _applySearch();
 
-
-
-      // Quietly sync in background without triggering loading spinner
       _silentRefresh();
     } catch (e) {
       if (!mounted) return;
+      setState(() => _processingIds.remove(active.id));
       TopToast.show(context, 'Failed: $e', backgroundColor: Colors.redAccent);
     }
   }
 
   Future<void> _activateValidity(HotspotActive active) async {
+    if (_processingIds.contains(active.id)) return;
+    
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -147,13 +149,17 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
 
     if (confirm != true) return;
 
+    setState(() => _processingIds.add(active.id));
+
     try {
       await widget.service.activateValidity(active.user);
       if (!mounted) return;
+      setState(() => _processingIds.remove(active.id));
       TopToast.show(context, 'Validity Activated!', backgroundColor: const Color(0xFF00E676));
       _silentRefresh();
     } catch (e) {
       if (!mounted) return;
+      setState(() => _processingIds.remove(active.id));
       TopToast.show(context, 'Failed: $e', backgroundColor: Colors.redAccent);
     }
   }
@@ -293,20 +299,6 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                                             ),
                                           ),
                                           const Spacer(),
-                                          SizedBox(
-                                            width: 32,
-                                            height: 32,
-                                            child: IconButton(
-                                              padding: EdgeInsets.zero,
-                                              icon: const Icon(
-                                                Icons.power_settings_new_rounded,
-                                                color: Color(0xFFFF5252),
-                                                size: 20,
-                                              ),
-                                              onPressed: () => _disconnectUser(a),
-                                              tooltip: 'Disconnect',
-                                            ),
-                                          ),
                                         ],
                                       ),
                                       const SizedBox(height: 2),
@@ -379,29 +371,6 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
-                                        )
-                                      else if (a.comment.contains('val:'))
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 4),
-                                          child: InkWell(
-                                            onTap: () => _activateValidity(a),
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF00BFFF).withValues(alpha: 0.2),
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: const Color(0xFF00BFFF).withValues(alpha: 0.5)),
-                                              ),
-                                              child: Text(
-                                                'Activate Validity',
-                                                style: GoogleFonts.poppins(
-                                                  fontSize: 9,
-                                                  color: const Color(0xFF00BFFF),
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
                                         ),
                                         
                                       const Spacer(),
@@ -421,12 +390,34 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                                           children: [
                                             Row(
                                               children: [
-                                                const Icon(
-                                                  Icons.pie_chart_outline_rounded,
-                                                  size: 14,
-                                                  color: Color(0xFF00E676),
-                                                ),
-                                                const SizedBox(width: 4),
+                                                if (_processingIds.contains(a.id))
+                                                  const SizedBox(
+                                                    width: 24,
+                                                    height: 24,
+                                                    child: CircularProgressIndicator(color: Color(0xFF00E676), strokeWidth: 2),
+                                                  )
+                                                else
+                                                  IconButton(
+                                                    onPressed: () => _activateValidity(a),
+                                                    icon: const Icon(
+                                                      Icons.bolt_rounded,
+                                                      color: Color(0xFF00E676),
+                                                      size: 20,
+                                                    ),
+                                                    tooltip: 'Activate Validity',
+                                                  ),
+                                                
+                                                if (!_processingIds.contains(a.id))
+                                                  IconButton(
+                                                    onPressed: () => _disconnectUser(a),
+                                                    icon: const Icon(
+                                                      Icons.link_off_rounded,
+                                                      color: Color(0xFFFF5252),
+                                                      size: 20,
+                                                    ),
+                                                    tooltip: 'Disconnect',
+                                                  ),
+                                                const Spacer(),
                                                 Expanded(
                                                   child: Text(
                                                     a.formattedDataLeft,

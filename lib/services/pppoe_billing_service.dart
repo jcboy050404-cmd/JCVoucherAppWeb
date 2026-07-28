@@ -61,13 +61,43 @@ class PppoeBillingService {
     await prefs.setString(_key, jsonEncode(jsonMap));
   }
 
+  /// Adds exactly one calendar month to [baseDate], clamping the day to the
+  /// last valid day of the target month. This avoids Dart's overflow behaviour
+  /// where DateTime(2026, 1, 31) silently becomes Mar 3 (Feb has 28/29 days),
+  /// which previously caused end-of-month due dates to drift forward.
+  ///
+  /// Example: Jan 31 → Feb 28 (or 29 in a leap year), Mar 31 → Apr 30.
+  static DateTime _addOneMonth(DateTime baseDate) {
+    final targetMonth = baseDate.month + 1;
+    final targetYear = baseDate.year + (targetMonth > 12 ? 1 : 0);
+    final normalizedMonth = ((targetMonth - 1) % 12) + 1;
+    // Days in the target month, accounting for leap years in February.
+    final daysInTargetMonth = DateTime(targetYear, normalizedMonth + 1, 0).day;
+    final clampedDay = baseDate.day < daysInTargetMonth
+        ? baseDate.day
+        : daysInTargetMonth;
+    return DateTime(targetYear, normalizedMonth, clampedDay);
+  }
+
   static Future<DateTime?> extendDueDateByOneMonth(String username, {DateTime? currentDueDate}) async {
-    final baseDate = currentDueDate ?? DateTime.now();
-    final newDueDate = DateTime(baseDate.year, baseDate.month + 1, baseDate.day);
-    
+    // Prefer the stored due date as the base when the caller didn't pass one,
+    // so the extension always continues from the real billing cycle instead
+    // of jumping forward from "now" (which can skip or duplicate a cycle).
     final map = await loadBillingMap();
     final key = username.trim().toLowerCase();
-    final existingFee = map[key]?.monthlyFee ?? 0.0;
+    final stored = map[key];
+
+    DateTime baseDate;
+    if (currentDueDate != null) {
+      baseDate = currentDueDate;
+    } else if (stored?.dueDate != null) {
+      baseDate = stored!.dueDate!;
+    } else {
+      baseDate = DateTime.now();
+    }
+
+    final newDueDate = _addOneMonth(baseDate);
+    final existingFee = stored?.monthlyFee ?? 0.0;
 
     await saveClientBilling(username, newDueDate, existingFee);
     return newDueDate;

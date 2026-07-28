@@ -15,6 +15,8 @@ import '../services/force_update_service.dart';
 import '../responsive.dart';
 import 'dashboard_screen.dart';
 import 'admin_screen.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../widgets/top_toast.dart';
 
 
 class LoginScreen extends StatefulWidget {
@@ -252,7 +254,8 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                       onPressed: () {
                         final input = pinCtrl.text.trim();
-                        if (input == '8888' || input == '1234') {
+                        final adminPin = dotenv.env['ADMIN_PIN'] ?? '8888';
+                        if (input == adminPin) {
                           Navigator.pop(dlgCtx, true);
                         } else {
                           setDlgState(() => isPinErr = true);
@@ -303,9 +306,11 @@ class _LoginScreenState extends State<LoginScreen>
       
       if (existingPin != null && existingPin.isNotEmpty) {
         // Enter existing PIN
+        if (!mounted) return;
         pinSuccess = await _showPinEntryDialog(email, existingPin);
       } else {
         // Create new PIN
+        if (!mounted) return;
         final newPin = await _showPinCreationDialog(email);
         if (newPin != null) {
           if (!mounted) return;
@@ -333,7 +338,9 @@ class _LoginScreenState extends State<LoginScreen>
       // SnackBar removed per request
 
     } catch (e) {
-      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+      if (mounted) {
+        TopToast.show(context, _getReadableErrorMessage(e), backgroundColor: Colors.redAccent);
+      }
     }
   }
 
@@ -415,9 +422,11 @@ class _LoginScreenState extends State<LoginScreen>
     
     if (existingPin != null && existingPin.isNotEmpty) {
       // Enter existing PIN
+      if (!mounted) return;
       pinSuccess = await _showPinEntryDialog(email, existingPin);
     } else {
       // Create new PIN
+      if (!mounted) return;
       final newPin = await _showPinCreationDialog(email);
       if (newPin != null) {
         if (!mounted) return;
@@ -447,15 +456,26 @@ class _LoginScreenState extends State<LoginScreen>
       final displayName = savedAcc['displayName'];
       final photoUrl = savedAcc['photoUrl'];
 
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFF00BFFF))),
+      );
+
       final user = await AuthService.instance.signInWithCustomEmail(
         email: email,
         displayName: displayName?.isNotEmpty == true ? displayName : null,
         photoUrl: photoUrl?.isNotEmpty == true ? photoUrl : null,
       );
       await _saveRecentAccount(user);
-      // SnackBar removed per request
+      
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      // Ignore login errors
+      if (mounted) {
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        TopToast.show(context, _getReadableErrorMessage(e), backgroundColor: Colors.redAccent);
+      }
     }
   }
 
@@ -1221,6 +1241,8 @@ class _LoginScreenState extends State<LoginScreen>
     if (!AuthService.instance.isSignedIn) {
       return;
     }
+    if (_connectingRouterId != null) return;
+    
     setState(() {
       _connectingRouterId = router.id;
       _errorMessage = null;

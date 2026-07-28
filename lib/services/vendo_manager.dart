@@ -38,12 +38,16 @@ class MikrotikVendoDriver implements BaseVendoService {
       final uptimeStr = res['uptime']?.toString() ?? 'Online';
       final board = res['board-name']?.toString() ?? res['board_name']?.toString() ?? res['model']?.toString() ?? 'RouterOS';
 
+      final now = DateTime.now();
       double sales = 0.0;
       for (final v in vouchers) {
-        final comment = v.comment;
-        final match = RegExp(r'(?:₱|price:?\s*)?(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(comment);
-        if (match != null) {
-          sales += double.tryParse(match.group(1) ?? '0') ?? 0;
+        if (!v.isUsed) continue;
+        final cd = v.createdDate;
+        if (cd != null &&
+            cd.year == now.year &&
+            cd.month == now.month &&
+            cd.day == now.day) {
+          sales += v.price;
         }
       }
 

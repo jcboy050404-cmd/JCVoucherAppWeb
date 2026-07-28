@@ -3,15 +3,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/voucher.dart';
 import '../models/user_profile.dart';
 import '../models/router_script.dart';
 import '../models/pppoe_user.dart';
+import '../models/router_file.dart';
 
 // ─── VoucherApp Script Encryption ────────────────────────────────────────────
 // Secret key used to sign router flag script names with HMAC-SHA256.
 // The email is never stored in plain text on the router.
-const String _kVoucherAppSecret = 'va_secret_mikrotik_2025_xK9#mP!qR';
+//
+// ⚠️ Loaded from .env at runtime. Like the Firebase secret, this is bundled
+// inside the APK and therefore not truly secret — it only keeps the email
+// out of Winbox/RouterOS listings and out of source control. See .env.
+String get _kVoucherAppSecret =>
+    dotenv.env['VOUCHER_APP_SECRET'] ?? 'va_fallback_secret';
 
 /// Returns a 16-character lowercase hex string derived from HMAC-SHA256
 /// of [email] using [_kVoucherAppSecret].
@@ -790,7 +797,7 @@ class MikrotikService {
     :if ([:find \$valStr "d"] >= 0) do={ :set interval ([:pick \$valStr 0 [:find \$valStr "d"]] . "d"); }
     :if ([:find \$valStr "h"] >= 0) do={ :set interval ([:pick \$valStr 0 [:find \$valStr "h"]] . "h"); }
     :local schedName ("exp_" . \$user);
-    :local onEvent ("/ip hotspot user remove [find name=\\"" . \$user . "\\"]; /ip hotspot active remove [find user=\\"" . \$user . "\\"]; /system scheduler remove [find name=\\"" . \$schedName . "\\"];");
+    :local onEvent ("/ip hotspot user disable [find name=\\"" . \$user . "\\"]; /ip hotspot active remove [find user=\\"" . \$user . "\\"]; /system scheduler remove [find name=\\"" . \$schedName . "\\"];");
     /system scheduler add name=\$schedName interval=\$interval start-date=[/system clock get date] start-time=[/system clock get time] on-event=\$onEvent;
     :local newComment ([:pick \$uComment 0 \$valPos] . "exp:" . [/system clock get date] . "/" . [/system clock get time] . [:pick \$uComment \$valEnd [:len \$uComment]]);
     /ip hotspot user set [find name=\$user] comment=\$newComment;
@@ -1597,6 +1604,76 @@ class MikrotikService {
       final trap = _getTrapData(reply);
       if (trap != null) {
         throw Exception(trap['message'] ?? 'Failed to update WebFig port');
+      }
+    });
+  }
+  // ─── File Management (RouterOS) ───────────────────────────────────────────
+
+  Future<List<RouterFile>> getFiles({String? directory}) async {
+    return _execute(() async {
+      final cmd = ['/file/print'];
+      _send(cmd);
+      final response = await _readResponse();
+      final trap = _getTrapData(response);
+      if (trap != null) {
+        throw Exception(trap['message'] ?? 'Failed to get files');
+      }
+
+      final files = <RouterFile>[];
+      for (final sentence in response) {
+        if (sentence.isNotEmpty && sentence[0] == '!re') {
+          final data = _parseWords(sentence);
+          final rf = RouterFile.fromMap(data);
+          // Simple client-side filtering if directory is specified
+          if (directory != null && directory.isNotEmpty) {
+            if (rf.name.startsWith(directory) && rf.name != directory) {
+              files.add(rf);
+            }
+          } else {
+            files.add(rf);
+          }
+        }
+      }
+      return files;
+    });
+  }
+
+  Future<String> getFileContents(String id) async {
+    return _execute(() async {
+      _send(['/file/get', '=.id=$id', '=value-name=contents']);
+      final response = await _readResponse();
+      final trap = _getTrapData(response);
+      if (trap != null) {
+        throw Exception(trap['message'] ?? 'Failed to get file contents');
+      }
+      
+      final reTag = response.firstWhere((s) => s.isNotEmpty && s[0] == '!re', orElse: () => <String>[]);
+      if (reTag.isNotEmpty) {
+        final data = _parseWords(reTag);
+        return data['ret'] ?? '';
+      }
+      return '';
+    });
+  }
+
+  Future<void> setFileContents(String id, String content) async {
+    return _execute(() async {
+      _send(['/file/set', '=.id=$id', '=contents=$content']);
+      final response = await _readResponse();
+      final trap = _getTrapData(response);
+      if (trap != null) {
+        throw Exception(trap['message'] ?? 'Failed to set file contents');
+      }
+    });
+  }
+
+  Future<void> deleteFile(String id) async {
+    return _execute(() async {
+      _send(['/file/remove', '=.id=$id']);
+      final response = await _readResponse();
+      final trap = _getTrapData(response);
+      if (trap != null) {
+        throw Exception(trap['message'] ?? 'Failed to delete file');
       }
     });
   }

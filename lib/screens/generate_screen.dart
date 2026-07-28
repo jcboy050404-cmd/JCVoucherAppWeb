@@ -616,6 +616,12 @@ class _GenerateScreenState extends State<GenerateScreen> {
       effectiveComment = effectiveComment.isEmpty ? nameStr : '$effectiveComment $nameStr';
     }
 
+    if (!effectiveComment.contains('Date:')) {
+      final now = DateTime.now();
+      final dateStr = 'Date:${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      effectiveComment = effectiveComment.isEmpty ? dateStr : '$effectiveComment $dateStr';
+    }
+
     if (_voucherFormatMode == 'code_only' && !effectiveComment.startsWith('vc-')) {
       effectiveComment = 'vc-$effectiveComment';
     } else if (_voucherFormatMode == 'user_pass' && !effectiveComment.startsWith('up-') && !effectiveComment.startsWith('vc-')) {

@@ -56,6 +56,16 @@ class _VoucherListScreenState extends State<VoucherListScreen>
   // Debounce timer for search
   DateTime? _lastSearchTime;
 
+  // Guards against overlapping _loadData() calls (initState, didPopNext,
+  // refresh, pull-to-refresh, retry). Without it, two concurrent runs iterate
+  // AND mutate the shared static caches concurrently → ConcurrentModificationError.
+  bool _isLoadingData = false;
+
+  // Tracks whether we are already subscribed to routeObserver, because
+  // didChangeDependencies can fire more than once and re-subscribing causes
+  // duplicate didPopNext → duplicate reloads per navigation.
+  bool _subscribedToRouteObserver = false;
+
   List<String> get _availableProfiles => _cachedProfiles;
   List<String> get _availablePrices => _cachedPrices;
   List<String> get _availableBatches => _cachedBatches;
@@ -83,6 +93,13 @@ class _VoucherListScreenState extends State<VoucherListScreen>
     _cachedProfiles = profiles.toList();
     _cachedPrices = prices.toList();
     _cachedBatches = batches.toList();
+
+    // If the currently selected profile filter no longer exists (e.g. all
+    // vouchers of that profile were deleted), reset it to 'all'. Otherwise
+    // DropdownButton gets a value not in its items → Flutter assertion error.
+    if (_filterProfile != 'all' && !_cachedProfiles.contains(_filterProfile)) {
+      _filterProfile = 'all';
+    }
   }
 
   List<Voucher> _getVouchersForPrint({
@@ -147,6 +164,10 @@ class _VoucherListScreenState extends State<VoucherListScreen>
     super.didChangeDependencies();
     // Subscribe so we can auto-refresh when a pushed route (e.g. Generate,
     // Print preview) pops and this screen becomes active again.
+    // Guard against double-subscription — didChangeDependencies can fire
+    // multiple times, and each extra subscribe doubles the didPopNext reloads.
+    if (_subscribedToRouteObserver) return;
+    _subscribedToRouteObserver = true;
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
   }
 
@@ -167,23 +188,33 @@ class _VoucherListScreenState extends State<VoucherListScreen>
   }
 
   Future<void> _loadData() async {
+    // Guard against overlapping calls (initState, didPopNext, refresh,
+    // pull-to-refresh, retry). Two concurrent runs would iterate and mutate
+    // the shared static newlyGeneratedVouchers cache at the same time.
+    if (_isLoadingData) return;
+    _isLoadingData = true;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final vouchers = await widget.service.getVouchers();
-      
-      // Merge recently generated vouchers to fix router API sync lag
+
+      // Merge recently generated vouchers to fix router API sync lag.
+      // Take a snapshot of the cache first so we don't iterate a collection
+      // that another path might mutate.
       final fetchedNames = vouchers.map((v) => v.name).toSet();
-      for (final preloaded in VoucherListScreen.newlyGeneratedVouchers) {
+      final preloadedSnapshot =
+          List<Voucher>.from(VoucherListScreen.newlyGeneratedVouchers);
+      for (final preloaded in preloadedSnapshot) {
         if (!fetchedNames.contains(preloaded.name)) {
           vouchers.add(preloaded);
         }
       }
       // Cleanup cache: remove from cache once router successfully returns them
-      VoucherListScreen.newlyGeneratedVouchers.removeWhere((v) => fetchedNames.contains(v.name));
-      
+      VoucherListScreen.newlyGeneratedVouchers
+          .removeWhere((v) => fetchedNames.contains(v.name));
+
       // Sort: Newest generated first
       vouchers.sort((a, b) {
         final aDate = a.createdDate;
@@ -196,13 +227,13 @@ class _VoucherListScreenState extends State<VoucherListScreen>
         } else if (bDate != null) {
           return 1;
         }
-        
+
         // MikroTik assigns IDs as * followed by HEX.
         final aHex = a.id.replaceFirst('*', '');
         final bHex = b.id.replaceFirst('*', '');
         final aIdNum = int.tryParse(aHex, radix: 16);
         final bIdNum = int.tryParse(bHex, radix: 16);
-        
+
         if (aIdNum != null && bIdNum != null) return bIdNum.compareTo(aIdNum);
         return b.id.compareTo(a.id);
       });
@@ -222,6 +253,8 @@ class _VoucherListScreenState extends State<VoucherListScreen>
         _error = e.toString().replaceFirst('Exception: ', '');
         _loading = false;
       });
+    } finally {
+      _isLoadingData = false;
     }
   }
 
@@ -271,13 +304,13 @@ class _VoucherListScreenState extends State<VoucherListScreen>
     try {
       await widget.service.removeActiveSessionByUsername(v.name);
       await widget.service.removeVoucher(v.id);
-      
+
       VoucherListScreen.newlyGeneratedVouchers.removeWhere((x) => x.id == v.id);
       VoucherListScreen.newlyGeneratedNames.remove(v.name);
-      
+
+      if (!mounted) return;
       setState(() => _all.removeWhere((x) => x.id == v.id));
       _applyFilter();
-      if (!mounted) return;
       TopToast.show(context, 'Voucher deleted', backgroundColor: const Color(0xFFFF5252));
     } catch (e) {
       if (!mounted) return;
@@ -295,8 +328,9 @@ class _VoucherListScreenState extends State<VoucherListScreen>
         VoucherListScreen.newlyGeneratedNames.remove(v.name);
       }
       VoucherListScreen.newlyGeneratedVouchers.removeWhere((v) => _selectedIds.contains(v.id));
-      
+
       await widget.service.removeVouchers(_selectedIds.toList());
+      if (!mounted) return;
       setState(() {
         _all.removeWhere((v) => _selectedIds.contains(v.id));
         _selectedIds.clear();
