@@ -230,20 +230,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   List<Voucher> _getVouchersForPrint({
-    required String profile,
-    required String price,
     required String batch,
     required bool availableOnly,
   }) {
     return _vouchers.where((v) {
       if (availableOnly && (v.isUsed || v.disabled)) return false;
-
-      if (profile != 'all' && v.profile != profile) return false;
-
-      if (price != 'all') {
-        final pStr = v.price > 0 ? '₱${v.price.toStringAsFixed(0)}' : 'Free';
-        if (pStr != price) return false;
-      }
 
       if (batch != 'all') {
         final bMatch = RegExp(r'Date:(\d{4}-\d{2}-\d{2})').firstMatch(v.comment);
@@ -297,8 +288,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _showPrintOptionsModal() {
-    String selProfile = 'all';
-    String selPrice = 'all';
     String selBatch = 'all';
     bool availableOnly = true;
 
@@ -310,8 +299,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         return StatefulBuilder(
           builder: (context, setModalState) {
             final targetVouchers = _getVouchersForPrint(
-              profile: selProfile,
-              price: selPrice,
               batch: selBatch,
               availableOnly: availableOnly,
             );
@@ -372,7 +359,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 ),
                               ),
                               Text(
-                                'Select profile, price, or batch label to print',
+                                'Select batch label to print',
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   color: Colors.white54,
@@ -384,94 +371,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ],
                     ),
                     const SizedBox(height: 20),
-
-                    // Filter by Profile
-                    _buildPrintFilterLabel('Filter by Profile'),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.04),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.08)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: selProfile,
-                          isExpanded: true,
-                          dropdownColor: const Color(0xFF1A1A2E),
-                          icon: const Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            color: Colors.white54,
-                          ),
-                          items: _availableProfiles
-                              .map(
-                                (p) => DropdownMenuItem(
-                                  value: p,
-                                  child: Text(
-                                    p == 'all' ? '🌐 All Profiles' : p,
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) {
-                              setModalState(() => selProfile = v);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Filter by Price
-                    _buildPrintFilterLabel('Filter by Price'),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.04),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.08)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: selPrice,
-                          isExpanded: true,
-                          dropdownColor: const Color(0xFF1A1A2E),
-                          icon: const Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            color: Colors.white54,
-                          ),
-                          items: _availablePrices
-                              .map(
-                                (p) => DropdownMenuItem(
-                                  value: p,
-                                  child: Text(
-                                    p == 'all' ? '💰 All Prices' : p,
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) {
-                              setModalState(() => selPrice = v);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
 
                     // Filter by Batch Label / Date
                     _buildPrintFilterLabel('Filter by Batch Label / Date'),

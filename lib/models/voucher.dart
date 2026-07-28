@@ -55,9 +55,13 @@ class Voucher {
   String get displayCode => name.toUpperCase();
 
   String get customerName {
-    final match = RegExp(r'cname:([a-zA-Z0-9\s_.-]+)').firstMatch(comment);
+    final match = RegExp(r'cname:(.*?)(?=\s+[a-zA-Z0-9]+:|$)').firstMatch(comment);
     if (match != null) {
-      return match.group(1)?.trim() ?? '';
+      String name = match.group(1)?.trim() ?? '';
+      // Remove trailing date text if present
+      name = name.replaceAll(RegExp(r'\s*\d{4}-\d{1,2}-\d{1,2}.*$'), '').trim();
+      name = name.replaceAll(RegExp(r'\s*[a-z]{3}/\d{1,2}/\d{4}.*$', caseSensitive: false), '').trim();
+      return name;
     }
     return '';
   }
@@ -247,5 +251,17 @@ class HotspotActive {
   String get formattedTimeLeft {
     if (sessionTimeLeft.isEmpty) return 'Unlimited';
     return sessionTimeLeft;
+  }
+
+  String get customerName {
+    final match = RegExp(r'cname:(.*?)(?=\s+[a-zA-Z0-9]+:|$)').firstMatch(comment);
+    if (match != null) {
+      String name = match.group(1)?.trim() ?? '';
+      // Remove trailing date text if present
+      name = name.replaceAll(RegExp(r'\s*\d{4}-\d{1,2}-\d{1,2}.*$'), '').trim();
+      name = name.replaceAll(RegExp(r'\s*[a-z]{3}/\d{1,2}/\d{4}.*$', caseSensitive: false), '').trim();
+      return name;
+    }
+    return '';
   }
 }

@@ -38,7 +38,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
 
   // Filter state
   String _filterStatus = 'all'; // all, available, used, expired
-  String _filterProfile = 'all';
+  String _filterBatch = 'all';
 
   // Multi-select state
   Set<String> _selectedIds = {};
@@ -94,17 +94,15 @@ class _VoucherListScreenState extends State<VoucherListScreen>
     _cachedPrices = prices.toList();
     _cachedBatches = batches.toList();
 
-    // If the currently selected profile filter no longer exists (e.g. all
-    // vouchers of that profile were deleted), reset it to 'all'. Otherwise
+    // If the currently selected batch filter no longer exists (e.g. all
+    // vouchers of that batch were deleted), reset it to 'all'. Otherwise
     // DropdownButton gets a value not in its items → Flutter assertion error.
-    if (_filterProfile != 'all' && !_cachedProfiles.contains(_filterProfile)) {
-      _filterProfile = 'all';
+    if (_filterBatch != 'all' && !_cachedBatches.contains(_filterBatch)) {
+      _filterBatch = 'all';
     }
   }
 
   List<Voucher> _getVouchersForPrint({
-    required String profile,
-    required String price,
     required String batch,
     required bool availableOnly,
     bool useSelected = false,
@@ -115,13 +113,6 @@ class _VoucherListScreenState extends State<VoucherListScreen>
 
     return _all.where((v) {
       if (availableOnly && (v.isUsed || v.disabled)) return false;
-
-      if (profile != 'all' && v.profile != profile) return false;
-
-      if (price != 'all') {
-        final pStr = v.price > 0 ? '₱${v.price.toStringAsFixed(0)}' : 'Free';
-        if (pStr != price) return false;
-      }
 
       if (batch != 'all') {
         final bMatch = RegExp(r'Date:(\d{4}-\d{2}-\d{2})').firstMatch(v.comment);
@@ -275,10 +266,16 @@ class _VoucherListScreenState extends State<VoucherListScreen>
         _ => true,
       };
 
-      final matchProfile =
-          _filterProfile == 'all' || v.profile == _filterProfile;
+      final matchBatch = () {
+        if (_filterBatch == 'all') return true;
+        final bMatch = RegExp(r'Date:(\d{4}-\d{2}-\d{2})').firstMatch(v.comment);
+        final bLabel = bMatch != null
+            ? bMatch.group(1)!
+            : (v.comment.isNotEmpty ? v.comment.split('|').first.trim() : 'No Batch');
+        return bLabel == _filterBatch;
+      }();
 
-      return matchSearch && matchStatus && matchProfile;
+      return matchSearch && matchStatus && matchBatch;
     }).toList();
   }
 
@@ -410,8 +407,8 @@ class _VoucherListScreenState extends State<VoucherListScreen>
               // ── Tabs ─────────────────────────────────────────────────────────
               _buildTabBar(),
 
-              // ── Profile filter dropdown ──────────────────────────────────────
-              if (_availableProfiles.length > 2) _buildProfileDropdown(),
+              // ── Batch filter dropdown ──────────────────────────────────────
+              if (_availableBatches.length > 2) _buildBatchDropdown(),
 
               // ── Multi-select action bar ──────────────────────────────────────
               if (_multiSelect) _buildMultiSelectBar(),
@@ -618,7 +615,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
     );
   }
 
-  Widget _buildProfileDropdown() {
+  Widget _buildBatchDropdown() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       child: Container(
@@ -627,22 +624,22 @@ class _VoucherListScreenState extends State<VoucherListScreen>
           color: const Color(0xFF161626),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: _filterProfile != 'all'
+            color: _filterBatch != 'all'
                 ? const Color(0xFFBB86FC).withValues(alpha: 0.6)
                 : Colors.white.withValues(alpha: 0.08),
-            width: _filterProfile != 'all' ? 1.5 : 1,
+            width: _filterBatch != 'all' ? 1.5 : 1,
           ),
         ),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
-            value: _filterProfile,
+            value: _filterBatch,
             isExpanded: true,
             dropdownColor: const Color(0xFF1A1A2E),
             icon: const Icon(
               Icons.keyboard_arrow_down_rounded,
               color: Colors.white54,
             ),
-            items: _availableProfiles
+            items: _availableBatches
                 .map(
                   (p) => DropdownMenuItem(
                     value: p,
@@ -650,8 +647,8 @@ class _VoucherListScreenState extends State<VoucherListScreen>
                       children: [
                         Icon(
                           p == 'all'
-                              ? Icons.style_rounded
-                              : Icons.label_rounded,
+                              ? Icons.list_alt_rounded
+                              : Icons.folder_rounded,
                           size: 16,
                           color: p == 'all'
                               ? const Color(0xFF00BFFF)
@@ -660,14 +657,14 @@ class _VoucherListScreenState extends State<VoucherListScreen>
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
-                            p == 'all' ? 'All Profiles' : p,
+                            p == 'all' ? 'All Batches' : p,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.poppins(
                               fontSize: 13,
-                              fontWeight: _filterProfile == p
+                              fontWeight: _filterBatch == p
                                   ? FontWeight.w600
                                   : FontWeight.w400,
-                              color: _filterProfile == p
+                              color: _filterBatch == p
                                   ? const Color(0xFFBB86FC)
                                   : Colors.white,
                             ),
@@ -680,7 +677,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
                 .toList(),
             onChanged: (v) {
               if (v != null) {
-                setState(() => _filterProfile = v);
+                setState(() => _filterBatch = v);
                 _applyFilter();
               }
             },
@@ -935,9 +932,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
   }
 
   void _showPrintOptionsModal({bool useSelected = false}) {
-    String selProfile = _filterProfile != 'all' ? _filterProfile : 'all';
-    String selPrice = 'all';
-    String selBatch = 'all';
+    String selBatch = _filterBatch != 'all' ? _filterBatch : 'all';
     bool availableOnly = true;
 
     showModalBottomSheet(
@@ -948,8 +943,6 @@ class _VoucherListScreenState extends State<VoucherListScreen>
         return StatefulBuilder(
           builder: (context, setModalState) {
             final targetVouchers = _getVouchersForPrint(
-              profile: selProfile,
-              price: selPrice,
               batch: selBatch,
               availableOnly: availableOnly,
               useSelected: useSelected,
@@ -1013,7 +1006,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
                               Text(
                                 useSelected
                                     ? 'Filter or print ${_selectedIds.length} selected vouchers'
-                                    : 'Select profile, price, or batch label to print',
+                                    : 'Select batch label to print',
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   color: Colors.white54,
@@ -1027,94 +1020,6 @@ class _VoucherListScreenState extends State<VoucherListScreen>
                     const SizedBox(height: 20),
 
                     if (!useSelected) ...[
-                      // Filter by Profile
-                      _buildPrintFilterLabel('Filter by Profile'),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.08)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selProfile,
-                            isExpanded: true,
-                            dropdownColor: const Color(0xFF1A1A2E),
-                            icon: const Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              color: Colors.white54,
-                            ),
-                            items: _availableProfiles
-                                .map(
-                                  (p) => DropdownMenuItem(
-                                    value: p,
-                                    child: Text(
-                                      p == 'all' ? '🌐 All Profiles' : p,
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) {
-                              if (v != null) {
-                                setModalState(() => selProfile = v);
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Filter by Price
-                      _buildPrintFilterLabel('Filter by Price'),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.08)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selPrice,
-                            isExpanded: true,
-                            dropdownColor: const Color(0xFF1A1A2E),
-                            icon: const Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              color: Colors.white54,
-                            ),
-                            items: _availablePrices
-                                .map(
-                                  (p) => DropdownMenuItem(
-                                    value: p,
-                                    child: Text(
-                                      p == 'all' ? '💰 All Prices' : p,
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) {
-                              if (v != null) {
-                                setModalState(() => selPrice = v);
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
                       // Filter by Batch Label / Date
                       _buildPrintFilterLabel('Filter by Batch Label / Date'),
                       const SizedBox(height: 8),

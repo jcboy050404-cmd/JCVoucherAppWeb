@@ -598,7 +598,12 @@ class _GenerateScreenState extends State<GenerateScreen> {
       effectiveUptime = _selectedUptime;
     }
 
-    String effectiveComment = _commentController.text.trim();
+    String customComment = _commentController.text.trim();
+    String effectiveComment = '';
+    if (customComment.isNotEmpty) {
+      effectiveComment = '$customComment |';
+    }
+
     final priceStr = _priceController.text.trim();
     if (priceStr.isNotEmpty && priceStr != '0') {
       effectiveComment = effectiveComment.isEmpty ? 'P:$priceStr' : '$effectiveComment P:$priceStr';
@@ -616,7 +621,7 @@ class _GenerateScreenState extends State<GenerateScreen> {
       effectiveComment = effectiveComment.isEmpty ? nameStr : '$effectiveComment $nameStr';
     }
 
-    if (!effectiveComment.contains('Date:')) {
+    if (customComment.isEmpty) {
       final now = DateTime.now();
       final dateStr = 'Date:${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
       effectiveComment = effectiveComment.isEmpty ? dateStr : '$effectiveComment $dateStr';

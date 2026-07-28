@@ -119,50 +119,7 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
     }
   }
 
-  Future<void> _activateValidity(HotspotActive active) async {
-    if (_processingIds.contains(active.id)) return;
-    
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E2E),
-        title: Text('Activate Validity?', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Text(
-          'Run validity activation script for "${active.user}"?',
-          style: GoogleFonts.poppins(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00BFFF),
-            ),
-            child: Text('Activate', style: GoogleFonts.poppins(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
 
-    if (confirm != true) return;
-
-    setState(() => _processingIds.add(active.id));
-
-    try {
-      await widget.service.activateValidity(active.user);
-      if (!mounted) return;
-      setState(() => _processingIds.remove(active.id));
-      TopToast.show(context, 'Validity Activated!', backgroundColor: const Color(0xFF00E676));
-      _silentRefresh();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _processingIds.remove(active.id));
-      TopToast.show(context, 'Failed: $e', backgroundColor: Colors.redAccent);
-    }
-  }
 
   /// Refreshes session list silently (no loading spinner shown to user)
   Future<void> _silentRefresh() async {
@@ -262,13 +219,13 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                                 crossAxisCount: 2,
                                 crossAxisSpacing: 12,
                                 mainAxisSpacing: 12,
-                                childAspectRatio: 0.62,
+                                childAspectRatio: 0.53,
                               ),
                               itemCount: _filteredActive.length,
                               itemBuilder: (context, i) {
                                 final a = _filteredActive[i];
                                 return Container(
-                                  padding: const EdgeInsets.all(12),
+                                  padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF161626),
                                     borderRadius: BorderRadius.circular(16),
@@ -282,51 +239,81 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                                       Row(
                                         children: [
                                           Container(
-                                            width: 8,
-                                            height: 8,
+                                            width: 10,
+                                            height: 10,
                                             decoration: const BoxDecoration(
                                               color: Color(0xFF00E676),
                                               shape: BoxShape.circle,
                                             ),
                                           ),
-                                          const SizedBox(width: 6),
+                                          const SizedBox(width: 8),
                                           Text(
                                             'ONLINE',
                                             style: GoogleFonts.poppins(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w800,
                                               color: const Color(0xFF00E676),
+                                              letterSpacing: 1.0,
                                             ),
                                           ),
                                           const Spacer(),
+                                          if (_processingIds.contains(a.id))
+                                            const SizedBox(
+                                              width: 22,
+                                              height: 22,
+                                              child: CircularProgressIndicator(color: Color(0xFFFF5252), strokeWidth: 2),
+                                            )
+                                          else
+                                            GestureDetector(
+                                              onTap: () => _disconnectUser(a),
+                                              child: const Icon(
+                                                Icons.power_settings_new_rounded,
+                                                color: Color(0xFFFF5252),
+                                                size: 22,
+                                              ),
+                                            ),
                                         ],
                                       ),
-                                      const SizedBox(height: 2),
+                                      const SizedBox(height: 8),
                                       Text(
                                         a.user,
                                         style: GoogleFonts.poppins(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
+                                          fontSize: 21,
+                                          fontWeight: FontWeight.w800,
                                           color: Colors.white,
-                                          letterSpacing: 1.2,
+                                          letterSpacing: 1.5,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                      const SizedBox(height: 8),
+                                      if (a.customerName.isNotEmpty) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          a.customerName,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: const Color(0xFF00BFFF),
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                      const SizedBox(height: 6),
                                       const Divider(color: Colors.white10, height: 1),
-                                      const SizedBox(height: 8),
+                                      const SizedBox(height: 6),
 
                                       // Network Info
                                       Text(
                                         'IP: ${a.address}',
                                         style: GoogleFonts.poppins(
-                                          fontSize: 10,
+                                          fontSize: 11,
                                           color: Colors.white70,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
+                                      const SizedBox(height: 4),
                                       Text(
                                         'MAC: ${a.macAddress}',
                                         style: GoogleFonts.poppins(
@@ -343,118 +330,90 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                                       Text(
                                         'Up: ${a.uptime}',
                                         style: GoogleFonts.poppins(
-                                          fontSize: 11,
+                                          fontSize: 12,
                                           color: const Color(0xFF00BFFF),
                                           fontWeight: FontWeight.w500,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
+                                      const SizedBox(height: 4),
                                       Text(
                                         'Left: ${a.formattedTimeLeft}',
                                         style: GoogleFonts.poppins(
-                                          fontSize: 10,
+                                          fontSize: 11,
                                           color: Colors.white70,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                      if (a.comment.contains('exp:'))
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 2),
-                                          child: Text(
-                                            'Exp: ${a.comment.split('exp:').last.split(' ').first}',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 9,
-                                              color: Colors.orangeAccent,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                      if (a.comment.contains('exp:')) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Exp: ${a.comment.split('exp:').last.split(' ').first}',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            color: Colors.orangeAccent,
                                           ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        
+                                      ],
+
                                       const Spacer(),
 
                                       // Data Usage Mini Box
                                       Container(
-                                        padding: const EdgeInsets.all(8),
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                         decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.04),
-                                          borderRadius: BorderRadius.circular(10),
-                                          border: Border.all(
-                                            color: Colors.white.withValues(alpha: 0.06),
-                                          ),
+                                          color: Colors.white.withValues(alpha: 0.05),
+                                          borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
-                                                if (_processingIds.contains(a.id))
-                                                  const SizedBox(
-                                                    width: 24,
-                                                    height: 24,
-                                                    child: CircularProgressIndicator(color: Color(0xFF00E676), strokeWidth: 2),
-                                                  )
-                                                else
-                                                  IconButton(
-                                                    onPressed: () => _activateValidity(a),
-                                                    icon: const Icon(
-                                                      Icons.bolt_rounded,
-                                                      color: Color(0xFF00E676),
-                                                      size: 20,
-                                                    ),
-                                                    tooltip: 'Activate Validity',
+                                                Icon(
+                                                  Icons.pie_chart_outline_rounded,
+                                                  color: a.formattedDataLeft.contains('Exhausted')
+                                                      ? const Color(0xFFFF5252)
+                                                      : const Color(0xFF00E676),
+                                                  size: 16,
+                                                ),
+                                                Text(
+                                                  a.formattedDataLeft,
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: a.formattedDataLeft.contains('Exhausted')
+                                                        ? const Color(0xFFFF5252)
+                                                        : const Color(0xFF00E676),
                                                   ),
-                                                
-                                                if (!_processingIds.contains(a.id))
-                                                  IconButton(
-                                                    onPressed: () => _disconnectUser(a),
-                                                    icon: const Icon(
-                                                      Icons.link_off_rounded,
-                                                      color: Color(0xFFFF5252),
-                                                      size: 20,
-                                                    ),
-                                                    tooltip: 'Disconnect',
-                                                  ),
-                                                const Spacer(),
-                                                Expanded(
-                                                  child: Text(
-                                                    a.formattedDataLeft,
-                                                    style: GoogleFonts.poppins(
-                                                      fontSize: 11,
-                                                      fontWeight: FontWeight.w700,
-                                                      color: a.formattedDataLeft.contains('Exhausted')
-                                                          ? const Color(0xFFFF5252)
-                                                          : const Color(0xFF00E676),
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    textAlign: TextAlign.right,
-                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
                                                 ),
                                               ],
                                             ),
-                                            if (a.dataUsageProgress > 0) ...[
-                                              const SizedBox(height: 6),
-                                              ClipRRect(
-                                                borderRadius: BorderRadius.circular(4),
-                                                child: LinearProgressIndicator(
-                                                  value: a.dataUsageProgress,
-                                                  backgroundColor: Colors.white10,
-                                                  color: a.dataUsageProgress > 0.9
-                                                      ? const Color(0xFFFF5252)
-                                                      : const Color(0xFF00E676),
-                                                  minHeight: 4,
-                                                ),
+                                            const SizedBox(height: 6),
+                                            ClipRRect(
+                                              borderRadius: BorderRadius.circular(4),
+                                              child: LinearProgressIndicator(
+                                                value: a.dataUsageProgress > 0 ? a.dataUsageProgress : 0.0,
+                                                backgroundColor: Colors.white10,
+                                                color: a.dataUsageProgress > 0.9
+                                                    ? const Color(0xFFFF5252)
+                                                    : const Color(0xFF00E676),
+                                                minHeight: 6,
                                               ),
-                                            ],
+                                            ),
                                             const SizedBox(height: 4),
                                             Text(
                                               'Used: ${a.formattedDataUsage}',
                                               style: GoogleFonts.poppins(
-                                                fontSize: 9,
-                                                color: Colors.white38,
+                                                fontSize: 10,
+                                                color: Colors.white54,
                                               ),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
