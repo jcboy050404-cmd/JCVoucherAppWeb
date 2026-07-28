@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/mikrotik_service.dart';
 import '../models/user_profile.dart';
+import '../responsive.dart';
 
 class ProfileListScreen extends StatefulWidget {
   final MikrotikService service;
@@ -68,7 +69,10 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
       }
     }
     
-    final cleanScript = scriptContent.replaceAll(RegExp(r':delay 1s;\s*:local currentlimit \[/ip hotspot user get \[find name=\$user\] limit-bytes-total\];\s*:if \(\[:len \$currentlimit\] = 0\) do=\{\s*(?::log info \("Setting [^"]*" \. \$user\);\s*)?/ip hotspot user set \[find name=\$user\] limit-bytes-total=\d+;\s*/ip hotspot active remove \[find user=\$user\];\s*\}\s*'), '').trim();
+    String cleanScript = scriptContent.replaceAll(RegExp(r':delay 1s;\s*:local currentlimit \[/ip hotspot user get \[find name=\$user\] limit-bytes-total\];\s*:if \([^)]+\) do=\{\s*(?::log info \("Setting [^"]*" \. \$user\);\s*)?/ip hotspot user set \[find name=\$user\] limit-bytes-total=\d+;\s*/ip hotspot active remove \[find user=\$user\];\s*\}\s*'), '').trim();
+    
+    // Remove auto-generated validity script for UI display
+    cleanScript = cleanScript.replaceAll(RegExp(r'# --- Auto-Generated Validity Script ---[\s\S]*?# --- End Auto-Generated Validity Script ---\s*'), '').trim();
     
     final onLoginCtrl = TextEditingController(text: cleanScript);
     final onLogoutCtrl = TextEditingController(text: profile?.onLogout ?? '');
@@ -315,6 +319,30 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
                                     final messenger = ScaffoldMessenger.of(context);
                                     try {
                                       String finalOnLogin = onLoginCtrl.text.trim();
+                                      
+                                      final validityScript = '''
+# --- Auto-Generated Validity Script ---
+:local uComment [/ip hotspot user get [find name=\$user] comment];
+:local valPos [:find \$uComment "val:"];
+:if ([:typeof \$valPos] = "num") do={
+    :local valEnd [:find \$uComment " " \$valPos];
+    :if ([:len \$valEnd] = 0) do={ :set valEnd [:len \$uComment]; }
+    :local valStr [:pick \$uComment (\$valPos+4) \$valEnd];
+    :local interval "0s";
+    :if ([:find \$valStr "d"] >= 0) do={ :set interval ([:pick \$valStr 0 [:find \$valStr "d"]] . "d"); }
+    :if ([:find \$valStr "h"] >= 0) do={ :set interval ([:pick \$valStr 0 [:find \$valStr "h"]] . "h"); }
+    :local schedName ("exp_" . \$user);
+    :local onEvent ("/ip hotspot user remove [find name=\\"" . \$user . "\\"]; /ip hotspot active remove [find user=\\"" . \$user . "\\"]; /system scheduler remove [find name=\\"" . \$schedName . "\\"];");
+    /system scheduler add name=\$schedName interval=\$interval start-date=[/system clock get date] start-time=[/system clock get time] on-event=\$onEvent;
+    :local newComment ([:pick \$uComment 0 \$valPos] . "exp:" . [/system clock get date] . "/" . [/system clock get time] . [:pick \$uComment \$valEnd [:len \$uComment]]);
+    /ip hotspot user set [find name=\$user] comment=\$newComment;
+}
+# --- End Auto-Generated Validity Script ---''';
+
+                                      if (!finalOnLogin.contains("Auto-Generated Validity Script")) {
+                                        finalOnLogin = '$validityScript\n$finalOnLogin'.trim();
+                                      }
+
                                       if (dataLimitUnit != 'None' && dataLimitCtrl.text.trim().isNotEmpty) {
                                         final val = int.tryParse(dataLimitCtrl.text.trim()) ?? 0;
                                         if (val > 0) {
@@ -323,8 +351,8 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
                                           final scriptBlock = '''
 :delay 1s;
 :local currentlimit [/ip hotspot user get [find name=\$user] limit-bytes-total];
-:if ([:len \$currentlimit] = 0) do={
-    :log info ("Setting \${val}\${dataLimitUnit} limit and restarting session for: " . \$user);
+:if (\$currentlimit = 0 || [:len \$currentlimit] = 0) do={
+    :log info ("Setting $val$dataLimitUnit limit and restarting session for: " . \$user);
     /ip hotspot user set [find name=\$user] limit-bytes-total=$bytes;
     /ip hotspot active remove [find user=\$user];
 }''';

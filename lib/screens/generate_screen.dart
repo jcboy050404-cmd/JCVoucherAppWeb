@@ -11,8 +11,9 @@ import '../services/auth_service.dart';
 import '../models/voucher.dart';
 import '../widgets/print_preview_helper.dart';
 import 'voucher_list_screen.dart';
+import 'voucher_list_screen.dart';
 import 'upgrade_screen.dart';
-
+import '../responsive.dart';
 class GenerateScreen extends StatefulWidget {
   final MikrotikService service;
   const GenerateScreen({super.key, required this.service});
@@ -30,6 +31,7 @@ class _GenerateScreenState extends State<GenerateScreen> {
   final _validityNumController = TextEditingController();
   final _priceController = TextEditingController();
   final _codeLengthController = TextEditingController(text: '6');
+  final _customerNameController = TextEditingController();
 
   int _count = 1;
   String _selectedProfile = 'default';
@@ -530,6 +532,7 @@ class _GenerateScreenState extends State<GenerateScreen> {
     _validityNumController.dispose();
     _priceController.dispose();
     _codeLengthController.dispose();
+    _customerNameController.dispose();
     super.dispose();
   }
 
@@ -599,6 +602,18 @@ class _GenerateScreenState extends State<GenerateScreen> {
     final priceStr = _priceController.text.trim();
     if (priceStr.isNotEmpty && priceStr != '0') {
       effectiveComment = effectiveComment.isEmpty ? 'P:$priceStr' : '$effectiveComment P:$priceStr';
+    }
+
+    final valNum = int.tryParse(_validityNumController.text.trim()) ?? 0;
+    if (valNum > 0) {
+      final validStr = 'val:$valNum$_validityUnit';
+      effectiveComment = effectiveComment.isEmpty ? validStr : '$effectiveComment $validStr';
+    }
+
+    final custName = _customerNameController.text.trim();
+    if (custName.isNotEmpty) {
+      final nameStr = 'cname:$custName';
+      effectiveComment = effectiveComment.isEmpty ? nameStr : '$effectiveComment $nameStr';
     }
 
     if (_voucherFormatMode == 'code_only' && !effectiveComment.startsWith('vc-')) {
@@ -935,12 +950,14 @@ class _GenerateScreenState extends State<GenerateScreen> {
                   width: 1.5,
                 ),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
                       width: 64,
                       height: 64,
                       decoration: BoxDecoration(
@@ -1053,6 +1070,7 @@ class _GenerateScreenState extends State<GenerateScreen> {
                   ],
                 ),
               ),
+              ),
             );
           },
         );
@@ -1067,8 +1085,9 @@ class _GenerateScreenState extends State<GenerateScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D1A),
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
+        child: Responsive.constrain(
+          CustomScrollView(
+            slivers: [
             // App Bar
             SliverToBoxAdapter(
               child: Padding(
@@ -1616,7 +1635,59 @@ class _GenerateScreenState extends State<GenerateScreen> {
                               ),
                       ),
 
-                      // 5. Voucher Code Validity Section
+                      // 5. Customer Name Section
+                      _FormCardSection(
+                        header: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SectionLabel('Customer Name (Optional)'),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Add a customer name to display on the printed voucher',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: Colors.white38,
+                              ),
+                            ),
+                          ],
+                        ),
+                        child: TextFormField(
+                          controller: _customerNameController,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'e.g. John Doe',
+                            hintStyle: GoogleFonts.poppins(
+                              color: Colors.white24,
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.person_outline,
+                              color: Colors.white38,
+                              size: 18,
+                            ),
+                            filled: true,
+                            fillColor: Colors.white.withValues(alpha: 0.05),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF00BFFF),
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // 6. Voucher Code Validity Section
                       _FormCardSection(
                         header: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2110,6 +2181,7 @@ class _GenerateScreenState extends State<GenerateScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

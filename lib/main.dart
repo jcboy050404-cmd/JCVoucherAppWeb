@@ -4,14 +4,16 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Global route observer used by list/dashboard screens to auto-refresh their
 /// data when they become the active route again (e.g. after generating
 /// vouchers and pressing back). Screens opt in by subscribing as RouteAware.
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   // Allow all orientations so the app is usable on phones and tablets,
   // in both portrait and landscape.
   SystemChrome.setPreferredOrientations(DeviceOrientation.values);

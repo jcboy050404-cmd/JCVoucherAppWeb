@@ -436,6 +436,7 @@ class MikrotikService {
   Future<List<HotspotActive>> getActiveSessions([List<Voucher>? existingVouchers]) async {
     return _execute(() async {
       final userLimits = <String, String>{};
+      final userComments = <String, String>{};
       Set<String>? knownUsernames;
 
       if (existingVouchers != null && existingVouchers.isNotEmpty) {
@@ -445,9 +446,12 @@ class MikrotikService {
           if (v.name.isNotEmpty && v.limitBytes.isNotEmpty) {
             userLimits[v.name] = v.limitBytes;
           }
+          if (v.name.isNotEmpty && v.comment.isNotEmpty) {
+            userComments[v.name] = v.comment;
+          }
         }
       } else {
-        _send(['/ip/hotspot/user/print', '=.proplist=name,limit-bytes-total,limit-bytes-out']);
+        _send(['/ip/hotspot/user/print', '=.proplist=name,limit-bytes-total,limit-bytes-out,comment']);
         final userResponse = await _readResponse();
         final trapData = _getTrapData(userResponse);
         if (trapData != null) {
@@ -460,10 +464,14 @@ class MikrotikService {
           final map = _parseWords(sentence);
           final name = map['name'] ?? '';
           final limit = map['limit-bytes-total'] ?? map['limit-bytes-out'] ?? '';
+          final comment = map['comment'] ?? '';
           if (name.isNotEmpty) {
             knownUsernames.add(name);
             if (limit.isNotEmpty) {
               userLimits[name] = limit;
+            }
+            if (comment.isNotEmpty) {
+              userComments[name] = comment;
             }
           }
         }
@@ -488,10 +496,11 @@ class MikrotikService {
           continue;
         }
 
-        if (userLimits.containsKey(username) &&
-            (!data.containsKey('limit-bytes-total') ||
-                data['limit-bytes-total'] == '0')) {
-          data['limit-bytes-total'] = userLimits[username]!;
+        if (data['user'] != null && userLimits.containsKey(data['user'])) {
+          data['limit-bytes-total'] = userLimits[data['user']]!;
+        }
+        if (data['user'] != null && userComments.containsKey(data['user'])) {
+          data['comment'] = userComments[data['user']]!;
         }
         sessions.add(HotspotActive.fromMap(data));
       }
@@ -763,6 +772,41 @@ class MikrotikService {
         final data = trapData;
         throw Exception(data['message'] ?? 'Failed to disconnect session');
       }
+    });
+  }
+
+  Future<void> activateValidity(String username) async {
+    return _execute(() async {
+      final scriptName = 'temp_activate_val_$username';
+      final scriptSource = '''
+:local user "$username";
+:local uComment [/ip hotspot user get [find name=\$user] comment];
+:local valPos [:find \$uComment "val:"];
+:if ([:typeof \$valPos] = "num") do={
+    :local valEnd [:find \$uComment " " \$valPos];
+    :if ([:len \$valEnd] = 0) do={ :set valEnd [:len \$uComment]; }
+    :local valStr [:pick \$uComment (\$valPos+4) \$valEnd];
+    :local interval "0s";
+    :if ([:find \$valStr "d"] >= 0) do={ :set interval ([:pick \$valStr 0 [:find \$valStr "d"]] . "d"); }
+    :if ([:find \$valStr "h"] >= 0) do={ :set interval ([:pick \$valStr 0 [:find \$valStr "h"]] . "h"); }
+    :local schedName ("exp_" . \$user);
+    :local onEvent ("/ip hotspot user remove [find name=\\"" . \$user . "\\"]; /ip hotspot active remove [find user=\\"" . \$user . "\\"]; /system scheduler remove [find name=\\"" . \$schedName . "\\"];");
+    /system scheduler add name=\$schedName interval=\$interval start-date=[/system clock get date] start-time=[/system clock get time] on-event=\$onEvent;
+    :local newComment ([:pick \$uComment 0 \$valPos] . "exp:" . [/system clock get date] . "/" . [/system clock get time] . [:pick \$uComment \$valEnd [:len \$uComment]]);
+    /ip hotspot user set [find name=\$user] comment=\$newComment;
+}
+''';
+      // Add temp script
+      _send(['/system/script/add', '=name=$scriptName', '=source=$scriptSource']);
+      await _readResponse();
+
+      // Run script
+      _send(['/system/script/run', '=.id=$scriptName']);
+      await _readResponse();
+
+      // Remove script
+      _send(['/system/script/remove', '=.id=$scriptName']);
+      await _readResponse();
     });
   }
 

@@ -45,6 +45,14 @@ class Voucher {
 
   String get displayCode => name.toUpperCase();
 
+  String get customerName {
+    final match = RegExp(r'cname:([a-zA-Z0-9\s_.-]+)').firstMatch(comment);
+    if (match != null) {
+      return match.group(1)?.trim() ?? '';
+    }
+    return '';
+  }
+
   double get price {
     final match = RegExp(r'P:([0-9]+(?:\.[0-9]+)?)').firstMatch(comment);
     if (match != null) {

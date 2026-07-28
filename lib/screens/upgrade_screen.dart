@@ -6,6 +6,7 @@ import '../services/mikrotik_service.dart';
 import '../services/cloud_sync_service.dart';
 import 'admin_screen.dart';
 import '../widgets/gcash_payment_modal.dart';
+import '../responsive.dart';
 
 class UpgradeScreen extends StatefulWidget {
   final MikrotikService? service;
@@ -199,7 +200,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
     
     return Scaffold(
       backgroundColor: const Color(0xFF0E0518),
-      body: Stack(
+      body: Responsive.constrain(Stack(
         children: [
           // Background glowing orbs
           AnimatedBuilder(
@@ -521,7 +522,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 

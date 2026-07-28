@@ -1,0 +1,46 @@
+name: iOS Unsigned Build
+
+on:
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'ios/**'
+
+jobs:
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          # You can specify a flutter_version here if needed
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS (No Code Signature)
+        # We use --no-codesign so it builds successfully without Apple Developer Certificates
+        run: flutter build ios --release --no-codesign
+
+      - name: Package into Unsigned IPA
+        run: |
+          mkdir -p Payload
+          mv build/ios/iphoneos/Runner.app Payload/
+          zip -r -y VoucherApp_iOS.ipa Payload
+
+      - name: Upload Unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoucherApp-iOS-Unsigned
+          path: VoucherApp_iOS.ipa
+          retention-days: 7

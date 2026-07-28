@@ -1256,11 +1256,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
           SafeArea(
-            child: RefreshIndicator(
-              onRefresh: _loadData,
-          color: const Color(0xFF00BFFF),
-          backgroundColor: const Color(0xFF1A1A2E),
-          child: CustomScrollView(
+            child: Responsive.constrain(
+              RefreshIndicator(
+                onRefresh: _loadData,
+                color: const Color(0xFF00BFFF),
+                backgroundColor: const Color(0xFF1A1A2E),
+                child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // ── App Bar ──────────────────────────────────────────────────
@@ -1872,6 +1873,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           ),
         ),
+      ),
       ),
         ],
       ),

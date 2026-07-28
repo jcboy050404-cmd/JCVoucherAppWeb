@@ -167,6 +167,28 @@ class VoucherCard extends StatelessWidget {
                 ],
               ),
 
+              if (voucher.customerName.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.person, size: 10, color: Colors.white54),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        voucher.customerName,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.8),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+
               // Middle: Code Display
               if (voucher.password.isEmpty || voucher.password == voucher.name) ...[
                 Column(

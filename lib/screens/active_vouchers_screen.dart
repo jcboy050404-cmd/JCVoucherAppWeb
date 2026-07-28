@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/mikrotik_service.dart';
 import '../models/voucher.dart';
+import '../responsive.dart';
 
 class ActiveVouchersScreen extends StatefulWidget {
   final MikrotikService service;
@@ -118,6 +119,45 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
     }
   }
 
+  Future<void> _activateValidity(HotspotActive active) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2E),
+        title: Text('Activate Validity?', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text(
+          'Run validity activation script for "${active.user}"?',
+          style: GoogleFonts.poppins(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00BFFF),
+            ),
+            child: Text('Activate', style: GoogleFonts.poppins(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await widget.service.activateValidity(active.user);
+      if (!mounted) return;
+      TopToast.show(context, 'Validity Activated!', backgroundColor: const Color(0xFF00E676));
+      _silentRefresh();
+    } catch (e) {
+      if (!mounted) return;
+      TopToast.show(context, 'Failed: $e', backgroundColor: Colors.redAccent);
+    }
+  }
+
   /// Refreshes session list silently (no loading spinner shown to user)
   Future<void> _silentRefresh() async {
     try {
@@ -151,7 +191,7 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Responsive.constrain(Column(
         children: [
           // Search box
           Padding(
@@ -327,7 +367,43 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-
+                                      if (a.comment.contains('exp:'))
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Text(
+                                            'Exp: ${a.comment.split('exp:').last.split(' ').first}',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 9,
+                                              color: Colors.orangeAccent,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        )
+                                      else if (a.comment.contains('val:'))
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 4),
+                                          child: InkWell(
+                                            onTap: () => _activateValidity(a),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF00BFFF).withValues(alpha: 0.2),
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: const Color(0xFF00BFFF).withValues(alpha: 0.5)),
+                                              ),
+                                              child: Text(
+                                                'Activate Validity',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 9,
+                                                  color: const Color(0xFF00BFFF),
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        
                                       const Spacer(),
 
                                       // Data Usage Mini Box
@@ -403,7 +479,7 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                           ),
           ),
         ],
-      ),
+      )),
     );
   }
 }

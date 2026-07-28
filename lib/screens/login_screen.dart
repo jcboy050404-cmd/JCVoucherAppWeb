@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -278,6 +280,8 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _authenticateWithGoogleFlow() async {
     try {
+
+
       // 1. Authenticate with Google (returns user but does not save session yet)
       final tempUser = await AuthService.instance.authenticateWithGoogle();
       if (tempUser == null) return; // User canceled
@@ -331,6 +335,50 @@ class _LoginScreenState extends State<LoginScreen>
     } catch (e) {
       if (mounted && Navigator.canPop(context)) Navigator.pop(context);
     }
+  }
+
+  Future<String?> _showManualEmailInputDialog() async {
+    final ctrl = TextEditingController();
+    return await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141426),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('PC Sign In', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Google Sign-In is not natively supported on Windows. Please enter your email manually to sign in and sync with the cloud.', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              style: GoogleFonts.poppins(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'your.email@gmail.com',
+                hintStyle: GoogleFonts.poppins(color: Colors.white24),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.05),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.white38)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF34A853),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: Text('Continue', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   String _getReadableErrorMessage(Object e) {

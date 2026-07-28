@@ -1,7 +1,14 @@
+import 'dart:convert';
+import 'dart:io' show HttpServer, Platform;
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../models/google_user.dart';
 import 'cloud_sync_service.dart';
 
@@ -105,6 +112,10 @@ class AuthService {
   // ── Google Sign-In ────────────────────────────────────────────────────────
   /// Authenticates with Google and returns the user model without saving the session yet.
   Future<GoogleUserModel?> authenticateWithGoogle() async {
+    if (!kIsWeb && Platform.isWindows) {
+      return _authenticateWithGoogleWindows();
+    }
+
     try {
       if (await _googleSignIn.isSignedIn()) {
         await _googleSignIn.signOut();
@@ -127,6 +138,103 @@ class AuthService {
     } catch (error) {
       debugPrint('AuthService: Google Sign In error: $error');
       rethrow;
+    }
+  }
+
+  /// Custom Windows Desktop OAuth 2.0 Loopback Flow
+  Future<GoogleUserModel?> _authenticateWithGoogleWindows() async {
+    final String clientId = dotenv.env['GOOGLE_OAUTH_CLIENT_ID_WINDOWS'] ?? '';
+    final String clientSecret = dotenv.env['GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS'] ?? '';
+
+    try {
+      // 1. Start a local server to listen for the redirect
+      final server = await HttpServer.bind('127.0.0.1', 0);
+      final redirectUri = 'http://127.0.0.1:${server.port}';
+
+      // 2. Open browser for Google Sign-In
+      final authUrl = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
+        'client_id': clientId,
+        'redirect_uri': redirectUri,
+        'response_type': 'code',
+        'scope': 'email profile openid',
+        'access_type': 'offline',
+        'prompt': 'select_account',
+      });
+
+      if (!await launchUrl(authUrl)) {
+        await server.close();
+        return null;
+      }
+
+      // 3. Wait for the redirect request from the browser
+      final request = await server.first;
+      final code = request.uri.queryParameters['code'];
+
+      // Send a response to the browser so the user knows they can close the tab
+      request.response
+        ..statusCode = 200
+        ..headers.set('Content-Type', 'text/html')
+        ..write('''
+          <html>
+            <head><title>Sign in successful</title></head>
+            <body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+              <h1 style="color: #4CAF50;">Authentication Successful!</h1>
+              <p>You can close this window and return to the Voucher App.</p>
+              <script>window.close();</script>
+            </body>
+          </html>
+        ''');
+      await request.response.close();
+      await server.close();
+
+      if (code == null) {
+        return null; // User cancelled or error
+      }
+
+      // 4. Exchange the code for an access token and ID token
+      final tokenResponse = await http.post(
+        Uri.parse('https://oauth2.googleapis.com/token'),
+        body: {
+          'client_id': clientId,
+          'client_secret': clientSecret,
+          'code': code,
+          'grant_type': 'authorization_code',
+          'redirect_uri': redirectUri,
+        },
+      );
+
+      if (tokenResponse.statusCode != 200) {
+        debugPrint('AuthService: Token exchange failed - ${tokenResponse.body}');
+        return null;
+      }
+
+      final tokenData = json.decode(tokenResponse.body);
+      final accessToken = tokenData['access_token'];
+      final idToken = tokenData['id_token'];
+
+      // 5. Fetch user profile info using the access token
+      final profileResponse = await http.get(
+        Uri.parse('https://www.googleapis.com/oauth2/v2/userinfo'),
+        headers: {'Authorization': 'Bearer $accessToken'},
+      );
+
+      if (profileResponse.statusCode != 200) {
+        debugPrint('AuthService: Profile fetch failed - ${profileResponse.body}');
+        return null;
+      }
+
+      final profileData = json.decode(profileResponse.body);
+
+      return GoogleUserModel(
+        id: profileData['id'] ?? 'windows_${profileData['email'].hashCode}',
+        email: profileData['email'],
+        displayName: profileData['name'] ?? profileData['email'].split('@').first,
+        photoUrl: profileData['picture'],
+        idToken: idToken,
+      );
+    } catch (e) {
+      debugPrint('AuthService: Windows OAuth error: $e');
+      return null;
     }
   }
 

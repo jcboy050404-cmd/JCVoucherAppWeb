@@ -357,9 +357,17 @@ class VoucherPdfService {
         voucher.limitUptime.isNotEmpty ? voucher.limitUptime : '--';
 
     String validUntil = '--';
-    final vuMatch =
-        RegExp(r'ValidUntil:(\d{4}-\d{2}-\d{2})').firstMatch(voucher.comment);
-    if (vuMatch != null) {
+    final valMatch = RegExp(r'val:(\d+)([dh])').firstMatch(voucher.comment);
+    final expMatch = RegExp(r'exp:(\S+)').firstMatch(voucher.comment);
+    final vuMatch = RegExp(r'ValidUntil:(\S+)').firstMatch(voucher.comment);
+
+    if (expMatch != null) {
+      validUntil = expMatch.group(1)!;
+    } else if (valMatch != null) {
+      final numStr = valMatch.group(1)!;
+      final unit = valMatch.group(2) == 'd' ? 'Days' : 'Hours';
+      validUntil = '$numStr $unit';
+    } else if (vuMatch != null) {
       validUntil = vuMatch.group(1)!;
     } else if (voucher.createdDate != null) {
       final d = voucher.createdDate!;
@@ -445,6 +453,13 @@ class VoucherPdfService {
               baseFont: baseFont,
               boldFont: boldFont),
 
+          if (voucher.customerName.isNotEmpty)
+            _thermalRow('Customer   :', voucher.customerName,
+                labelSize: fieldLabelSize,
+                valueSize: fieldValueSize,
+                baseFont: baseFont,
+                boldFont: boldFont),
+
           // Price
           _thermalRow('Price      :', priceStr,
               labelSize: fieldLabelSize,
@@ -520,9 +535,17 @@ class VoucherPdfService {
         v.limitUptime.isNotEmpty ? v.limitUptime : '--';
 
     String validUntil = '--';
-    final vuMatch =
-        RegExp(r'ValidUntil:(\d{4}-\d{2}-\d{2})').firstMatch(v.comment);
-    if (vuMatch != null) {
+    final valMatch = RegExp(r'val:(\d+)([dh])').firstMatch(v.comment);
+    final expMatch = RegExp(r'exp:(\S+)').firstMatch(v.comment);
+    final vuMatch = RegExp(r'ValidUntil:(\S+)').firstMatch(v.comment);
+
+    if (expMatch != null) {
+      validUntil = expMatch.group(1)!;
+    } else if (valMatch != null) {
+      final numStr = valMatch.group(1)!;
+      final unit = valMatch.group(2) == 'd' ? 'Days' : 'Hours';
+      validUntil = '$numStr $unit';
+    } else if (vuMatch != null) {
       validUntil = vuMatch.group(1)!;
     } else if (v.createdDate != null) {
       final d = v.createdDate!;
@@ -585,6 +608,9 @@ class VoucherPdfService {
                       pw.Container(height: 0.5, color: PdfColors.black),
                       _sheetRow('Time Limit :', uptimeStr,
                           baseFont: baseFont, boldFont: boldFont),
+                      if (v.customerName.isNotEmpty)
+                        _sheetRow('Customer   :', v.customerName,
+                            baseFont: baseFont, boldFont: boldFont),
                       _sheetRow('Price      :', priceStr,
                           baseFont: baseFont, boldFont: boldFont),
                       _sheetRow('Valid Until:', validUntil,
@@ -1085,6 +1111,11 @@ class VoucherPdfService {
             children: [
               pw.Text('Price:', style: pw.TextStyle(font: baseFont, fontSize: 10)),
               pw.Text(voucher.price > 0 ? 'P${voucher.price.toStringAsFixed(0)}' : 'Free', style: pw.TextStyle(font: boldFont, fontSize: 10)),
+              if (voucher.customerName.isNotEmpty) ...[
+                pw.SizedBox(height: 4),
+                pw.Text('Customer:', style: pw.TextStyle(font: baseFont, fontSize: 10)),
+                pw.Text(voucher.customerName, style: pw.TextStyle(font: boldFont, fontSize: 10)),
+              ],
             ],
           ),
         ],
@@ -2076,6 +2107,10 @@ class VoucherPdfService {
                         pw.SizedBox(height: 4),
                         pw.Text('Validity: ${voucher.limitUptime.isEmpty ? "Unlimited" : voucher.limitUptime}', style: pw.TextStyle(font: boldFont, fontSize: 6)),
                         pw.SizedBox(height: 2),
+                        if (voucher.customerName.isNotEmpty) ...[
+                          pw.Text('Name: ${voucher.customerName}', style: pw.TextStyle(font: boldFont, fontSize: 6)),
+                          pw.SizedBox(height: 2),
+                        ],
                         pw.Text('Time: ${voucher.limitUptime.isEmpty ? "Unlimited" : voucher.limitUptime}', style: pw.TextStyle(font: boldFont, fontSize: 6)),
                         pw.SizedBox(height: 2),
                         pw.Text(_formatDataLimit(voucher.limitBytes), style: pw.TextStyle(font: boldFont, fontSize: 6)),
