@@ -142,6 +142,31 @@ class Voucher {
     return null;
   }
 
+  DateTime? get activationDate {
+    // 1. MikroTik exp: tag (appended by script upon first login)
+    final expMatch = RegExp(r'exp:([a-zA-Z]{3}/\d{1,2}/\d{4}|\d{4}-\d{1,2}-\d{1,2})').firstMatch(comment);
+    if (expMatch != null) {
+      final dateStr = expMatch.group(1)!;
+      if (dateStr.contains('/')) {
+        final parts = dateStr.split('/');
+        final monthStr = parts[0].toLowerCase();
+        final day = int.tryParse(parts[1]) ?? 1;
+        final year = int.tryParse(parts[2]) ?? 2000;
+        const months = {
+          'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+          'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+        };
+        final month = months[monthStr] ?? 1;
+        return DateTime(year, month, day);
+      } else {
+        return DateTime.tryParse(dateStr);
+      }
+    }
+
+    // 2. Fallback to generation date
+    return createdDate;
+  }
+
   bool get isNew {
     final cd = createdDate;
     if (cd != null) {

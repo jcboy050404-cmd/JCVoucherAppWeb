@@ -174,10 +174,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     final now = DateTime.now();
     return _vouchers.where((v) {
       if (!v.isUsed) return false;
-      if (v.createdDate == null) return false;
-      return v.createdDate!.year == now.year &&
-          v.createdDate!.month == now.month &&
-          v.createdDate!.day == now.day;
+      final act = v.activationDate;
+      if (act == null) return false;
+      return act.year == now.year &&
+          act.month == now.month &&
+          act.day == now.day;
     }).fold(0.0, (sum, v) => sum + v.price);
   }
 
@@ -185,9 +186,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     final now = DateTime.now();
     return _vouchers.where((v) {
       if (!v.isUsed) return false;
-      if (v.createdDate == null) return false;
-      return v.createdDate!.year == now.year &&
-          v.createdDate!.month == now.month;
+      final act = v.activationDate;
+      if (act == null) return false;
+      return act.year == now.year &&
+          act.month == now.month;
     }).fold(0.0, (sum, v) => sum + v.price);
   }
 
