@@ -339,7 +339,17 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        'Left: ${a.formattedTimeLeft}',
+                                        () {
+                                          final hasTimeLimit = a.sessionTimeLeft.isNotEmpty;
+                                          final hasDataLimit = (double.tryParse(a.limitBytesTotal) ?? 0) > 0;
+                                          if (hasTimeLimit) {
+                                            return 'Time Left: ${a.formattedTimeLeft}';
+                                          } else if (hasDataLimit) {
+                                            return 'Data Left: ${a.formattedDataLeft}';
+                                          } else {
+                                            return 'Limit: No Limit';
+                                          }
+                                        }(),
                                         style: GoogleFonts.poppins(
                                           fontSize: 11,
                                           color: Colors.white70,

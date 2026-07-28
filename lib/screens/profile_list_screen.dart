@@ -351,7 +351,7 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
                                           final scriptBlock = '''
 :delay 1s;
 :local currentlimit [/ip hotspot user get [find name=\$user] limit-bytes-total];
-:if (\$currentlimit = 0 || [:len \$currentlimit] = 0) do={
+:if (\$currentlimit = 0 || \$currentlimit < $bytes) do={
     :log info ("Setting $val$dataLimitUnit limit and restarting session for: " . \$user);
     /ip hotspot user set [find name=\$user] limit-bytes-total=$bytes;
     /ip hotspot active remove [find user=\$user];

@@ -79,10 +79,6 @@ class Voucher {
     final numVal = double.tryParse(comment.trim());
     if (numVal != null) return numVal;
 
-    // 4. Try parsing from formattedPrice
-    final fp = double.tryParse(formattedPrice);
-    if (fp != null) return fp;
-
     return 0.0;
   }
 

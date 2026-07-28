@@ -231,7 +231,7 @@ class _ScriptListScreenState extends State<ScriptListScreen> {
     try {
       await widget.service.runScript(script.name);
       if (!mounted) return;
-      TopToast.show(context, 'Script added successfully', backgroundColor: const Color(0xFF00E676));
+      TopToast.show(context, 'Script ran successfully', backgroundColor: const Color(0xFF00E676));
       _loadScripts();
     } catch (e) {
       if (!mounted) return;
@@ -242,6 +242,7 @@ class _ScriptListScreenState extends State<ScriptListScreen> {
   Future<void> _deleteScript(RouterScript script) async {
     try {
       await widget.service.removeScript(script.id);
+      if (!mounted) return;
       _loadScripts();
     } catch (e) {
       if (!mounted) return;
