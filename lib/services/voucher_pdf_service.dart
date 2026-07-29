@@ -314,6 +314,7 @@ class VoucherPdfService {
                             _buildSheetTicketCell(
                               idx: r + c,
                               slice: slice,
+                              overallIndex: (p * perPage) + r + c + 1,
                               cellW: cellW,
                               cellH: cellH,
                               baseFont: baseFont,
@@ -379,6 +380,8 @@ class VoucherPdfService {
     final double fieldLabelSize = is58 ? 9.0 : 10.0;
     final double fieldValueSize = is58 ? 10.5 : 12.0;
     final double codeFontSize = is58 ? 11.5 : 13.5;
+    
+    final String genDate = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
 
     return pw.Container(
       width: usableWidth,
@@ -467,8 +470,13 @@ class VoucherPdfService {
               baseFont: baseFont,
               boldFont: boldFont),
 
-          // Valid Until
           _thermalRow('Valid Until:', validUntil,
+              labelSize: fieldLabelSize - 0.5,
+              valueSize: fieldValueSize - 0.5,
+              baseFont: baseFont,
+              boldFont: boldFont),
+              
+          _thermalRow('Generated  :', genDate,
               labelSize: fieldLabelSize - 0.5,
               valueSize: fieldValueSize - 0.5,
               baseFont: baseFont,
@@ -522,6 +530,7 @@ class VoucherPdfService {
     required double cellH,
     required pw.Font baseFont,
     required pw.Font boldFont,
+    int? overallIndex,
   }) {
     if (idx >= slice.length) {
       return pw.SizedBox(width: cellW, height: cellH);
@@ -553,6 +562,8 @@ class VoucherPdfService {
           '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     }
 
+    final String genDate = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
+
     return pw.SizedBox(
       width: cellW,
       height: cellH,
@@ -578,13 +589,27 @@ class VoucherPdfService {
                 child: pw.Column(
                   mainAxisAlignment: pw.MainAxisAlignment.center,
                   children: [
-                    pw.Text(
-                      'Wi-Fi VOUCHER',
-                      style: pw.TextStyle(
-                        font: boldFont,
-                        fontSize: 6,
-                        color: PdfColors.black,
-                      ),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          'Wi-Fi VOUCHER',
+                          style: pw.TextStyle(
+                            font: boldFont,
+                            fontSize: 6,
+                            color: PdfColors.black,
+                          ),
+                        ),
+                        if (overallIndex != null)
+                          pw.Text(
+                            '#$overallIndex',
+                            style: pw.TextStyle(
+                              font: boldFont,
+                              fontSize: 6,
+                              color: PdfColors.black,
+                            ),
+                          ),
+                      ],
                     ),
                     pw.SizedBox(height: 1.5),
                     pw.Container(height: 1.0, color: PdfColors.black),
@@ -614,6 +639,8 @@ class VoucherPdfService {
                       _sheetRow('Price      :', priceStr,
                           baseFont: baseFont, boldFont: boldFont),
                       _sheetRow('Valid Until:', validUntil,
+                          baseFont: baseFont, boldFont: boldFont),
+                      _sheetRow('Generated:', genDate,
                           baseFont: baseFont, boldFont: boldFont),
                     ],
                   ),
@@ -1750,7 +1777,9 @@ class VoucherPdfService {
     required pw.Font baseFont,
     required pw.Font boldFont,
     required String hotspotName,
+    int? overallIndex,
   }) {
+    final String genDate = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
     final bool hasPassword = voucher.password.isNotEmpty && voucher.password != voucher.name;
     return pw.Container(
       width: usableWidth,
@@ -1766,7 +1795,16 @@ class VoucherPdfService {
         child: pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            pw.Text(hotspotName, style: pw.TextStyle(font: boldFont, fontSize: 14)),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.center,
+              children: [
+                pw.Text(hotspotName, style: pw.TextStyle(font: boldFont, fontSize: 14)),
+                if (overallIndex != null) ...[
+                  pw.SizedBox(width: 4),
+                  pw.Text('#$overallIndex', style: pw.TextStyle(font: boldFont, fontSize: 10)),
+                ],
+              ],
+            ),
             pw.SizedBox(height: 4),
             pw.Divider(thickness: 1),
             pw.SizedBox(height: 8),
@@ -1795,6 +1833,13 @@ class VoucherPdfService {
               children: [
                 pw.Text('Price:', style: pw.TextStyle(font: baseFont, fontSize: 9)),
                 pw.Text(voucher.price > 0 ? 'P${voucher.price.toStringAsFixed(0)}' : 'Free', style: pw.TextStyle(font: boldFont, fontSize: 9)),
+              ],
+            ),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Generated:', style: pw.TextStyle(font: baseFont, fontSize: 9)),
+                pw.Text(genDate, style: pw.TextStyle(font: boldFont, fontSize: 9)),
               ],
             ),
           ],
@@ -1903,6 +1948,7 @@ class VoucherPdfService {
                     baseFont: baseFont,
                     boldFont: boldFont,
                     hotspotName: hotspotName,
+                    overallIndex: i + 1,
                   ),
                   if (i < vouchers.length - 1) pw.SizedBox(height: spacing),
                 ],
@@ -1956,7 +2002,10 @@ class VoucherPdfService {
                     child: pw.Wrap(
                       spacing: colSpacing,
                       runSpacing: rowSpacing,
-                      children: slice.map((voucher) {
+                      children: slice.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final voucher = entry.value;
+                        final overallIndex = (p * perPage) + idx + 1;
                         return _buildPremiumSheetTicket(
                           voucher: voucher,
                           width: cellW,
@@ -1968,6 +2017,7 @@ class VoucherPdfService {
                           footerNote: footerNote,
                           logoBytes: logoBytes,
                           primaryColor: primaryColor,
+                          overallIndex: overallIndex,
                         );
                       }).toList(),
                     ),
@@ -2002,9 +2052,11 @@ class VoucherPdfService {
     required String footerNote,
     Uint8List? logoBytes,
     PdfColor primaryColor = PdfColors.green,
+    int? overallIndex,
   }) {
     final bool hasPassword = voucher.password.isNotEmpty && voucher.password != voucher.name;
     final String priceText = voucher.formattedPrice;
+    final String genDate = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
 
     return pw.Container(
       width: width,
@@ -2114,6 +2166,8 @@ class VoucherPdfService {
                         pw.Text('Time: ${voucher.limitUptime.isEmpty ? "Unlimited" : voucher.limitUptime}', style: pw.TextStyle(font: boldFont, fontSize: 6)),
                         pw.SizedBox(height: 2),
                         pw.Text(_formatDataLimit(voucher.limitBytes), style: pw.TextStyle(font: boldFont, fontSize: 6)),
+                        pw.SizedBox(height: 2),
+                        pw.Text('Generated: $genDate', style: pw.TextStyle(font: baseFont, fontSize: 5)),
                         pw.Expanded(child: pw.SizedBox()),
                         pw.Container(
                           padding: const pw.EdgeInsets.all(4),
@@ -2136,9 +2190,19 @@ class VoucherPdfService {
             width: double.infinity,
             padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 8),
             color: primaryColor,
-            child: pw.Text(
-              'Login : $loginUrl',
-              style: pw.TextStyle(font: boldFont, fontSize: 7, color: PdfColors.white),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'Login : $loginUrl',
+                  style: pw.TextStyle(font: boldFont, fontSize: 7, color: PdfColors.white),
+                ),
+                if (overallIndex != null)
+                  pw.Text(
+                    '#$overallIndex',
+                    style: pw.TextStyle(font: boldFont, fontSize: 7, color: PdfColors.white),
+                  ),
+              ],
             ),
           ),
         ],
@@ -2152,6 +2216,7 @@ class VoucherPdfService {
     required pw.Font baseFont,
     required pw.Font boldFont,
     required String hotspotName,
+    int? overallIndex,
   }) {
     // Thermal representation for premium design
     return _buildClassicThermalTicket(
@@ -2160,6 +2225,7 @@ class VoucherPdfService {
       baseFont: baseFont,
       boldFont: boldFont,
       hotspotName: hotspotName,
+      overallIndex: overallIndex,
     );
   }
 }
