@@ -5,6 +5,8 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'services/notification_service.dart';
 
 /// Global route observer used by list/dashboard screens to auto-refresh their
 /// data when they become the active route again (e.g. after generating
@@ -13,7 +15,15 @@ final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
+  
+  tz.initializeTimeZones();
+  await NotificationService().init();
+
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint("Failed to load .env file: $e");
+  }
   // Allow all orientations so the app is usable on phones and tablets,
   // in both portrait and landscape.
   SystemChrome.setPreferredOrientations(DeviceOrientation.values);
@@ -92,24 +102,30 @@ class _AppStartupState extends State<AppStartup> {
   }
 
   Future<void> _restoreSession() async {
-    // Restore Gmail session from secure storage (survives uninstall).
-    // AuthService writes to Android Keystore, so the email persists.
-    await AuthService.instance.init();
+    try {
+      await NotificationService().requestPermissions();
+    } catch (e) {
+      debugPrint("Notification permissions error: $e");
+    }
+
+    try {
+      await AuthService.instance.init();
+    } catch (e) {
+      debugPrint("AuthService init error: $e");
+    }
 
     if (!mounted) return;
 
     // Navigate to LoginScreen. The Gmail card will already show the restored
     // account — user only needs to tap a router to connect.
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context2, anim, anim2) => const LoginScreen(),
-          transitionsBuilder: (context2, animation, anim2, child) =>
-              FadeTransition(opacity: animation, child: child),
-          transitionDuration: const Duration(milliseconds: 400),
-        ),
-      );
-    }
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context2, anim, anim2) => const LoginScreen(),
+        transitionsBuilder: (context2, animation, anim2, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
   }
 
   @override

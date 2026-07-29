@@ -691,7 +691,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   Color color = const Color(0xFF00BFFF);
                                   IconData icon = Icons.card_giftcard_rounded;
 
-                                  if (AuthService.isAdmin(user.email)) {
+                                  if (AuthService.isCurrentUserAdmin(user.email)) {
                                     label = 'ADMIN 👑';
                                     color = const Color(0xFFFFD700);
                                     icon = Icons.admin_panel_settings_rounded;
@@ -752,7 +752,7 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
 
                 // Admin Panel Button (ONLY for Admin users)
-                if (AuthService.isAdmin(user.email))
+                if (AuthService.isCurrentUserAdmin(user.email))
                   GestureDetector(
                     onTap: _verifyAndOpenAdminPortal,
                     child: Container(

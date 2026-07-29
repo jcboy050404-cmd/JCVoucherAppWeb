@@ -32,7 +32,10 @@ class CloudSyncService {
   static String get _dbSecret => dotenv.env['FIREBASE_DB_SECRET'] ?? '';
 
   /// Appends the auth secret to any Firebase REST URL path.
-  static String _auth(String path) => _dbSecret.isEmpty ? path : '$path?auth=$_dbSecret';
+  static String _auth(String path) {
+    if (_dbSecret.isEmpty) return path;
+    return path.contains('?') ? '$path&auth=$_dbSecret' : '$path?auth=$_dbSecret';
+  }
 
   static String _cleanEmail(String email) {
     return email.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_').toLowerCase();
@@ -70,11 +73,11 @@ class CloudSyncService {
           if (photoUrl != null && photoUrl.isNotEmpty) {
             updatePayload['photo_url'] = photoUrl;
           }
-          await http.patch(
+          http.patch(
             url,
             headers: {'Content-Type': 'application/json'},
             body: json.encode(updatePayload),
-          ).timeout(const Duration(seconds: 4));
+          ).timeout(const Duration(seconds: 4)).catchError((_) => http.Response('', 500));
 
           debugPrint('CloudSyncService: Account loaded from Cloud DB [$cleanEmailStr]');
           return {
@@ -227,15 +230,7 @@ class CloudSyncService {
     }
   }
 
-  /// Resets all user PRO records in Firebase Cloud DB.
-  static Future<void> resetAllProInCloud() async {
-    try {
-      final url = Uri.parse(_auth('$_baseUrl.json'));
-      await http.delete(url).timeout(const Duration(seconds: 4));
-    } catch (e) {
-      debugPrint('CloudSyncService: Delete skipped ($e)');
-    }
-  }
+
 
   // ─── Payment Requests (GCash QR / Admin Approval) ─────────────────────────
 
@@ -280,7 +275,8 @@ class CloudSyncService {
     final cleanUserEmail = email.trim().toLowerCase();
 
     try {
-      final url = Uri.parse(_auth('$_paymentReqUrl.json'));
+      final queryUrl = '$_paymentReqUrl.json?orderBy="email"&equalTo="${Uri.encodeComponent(cleanUserEmail)}"';
+      final url = Uri.parse(_auth(queryUrl));
       final response = await http.get(url).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200 && response.body != 'null') {
         final data = json.decode(response.body) as Map<String, dynamic>?;
@@ -290,14 +286,11 @@ class CloudSyncService {
 
           data.forEach((key, val) {
             if (val is Map<String, dynamic>) {
-              final reqEmail = (val['email'] ?? '').toString().toLowerCase();
-              if (reqEmail == cleanUserEmail) {
-                final timeStr = val['submitted_at'] ?? '';
-                final dt = DateTime.tryParse(timeStr) ?? DateTime(2000);
-                if (latestTime == null || dt.isAfter(latestTime!)) {
-                  latestTime = dt;
-                  latestReq = val;
-                }
+              final timeStr = val['submitted_at'] ?? '';
+              final dt = DateTime.tryParse(timeStr) ?? DateTime(2000);
+              if (latestTime == null || dt.isAfter(latestTime!)) {
+                latestTime = dt;
+                latestReq = val;
               }
             }
           });
@@ -313,7 +306,8 @@ class CloudSyncService {
   /// Fetches all payment requests for Admin approval history.
   static Future<List<Map<String, dynamic>>> getAllPaymentRequests() async {
     try {
-      final url = Uri.parse(_auth('$_paymentReqUrl.json'));
+      final queryUrl = '$_paymentReqUrl.json?orderBy="submitted_at"&limitToLast=50';
+      final url = Uri.parse(_auth(queryUrl));
       final response = await http.get(url).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200 && response.body != 'null') {
         final data = json.decode(response.body) as Map<String, dynamic>?;
@@ -462,7 +456,8 @@ class CloudSyncService {
   /// Fetches all registered users from Firebase Database.
   static Future<List<Map<String, dynamic>>> getAllUsers() async {
     try {
-      final url = Uri.parse(_auth('$_baseUrl.json'));
+      final queryUrl = '$_baseUrl.json?orderBy="last_login_at"&limitToLast=50';
+      final url = Uri.parse(_auth(queryUrl));
       final response = await http.get(url).timeout(const Duration(seconds: 8));
       if (response.statusCode == 200 && response.body != 'null') {
         final data = json.decode(response.body) as Map<String, dynamic>?;
@@ -491,6 +486,8 @@ class CloudSyncService {
           });
           return list;
         }
+      } else {
+        debugPrint('CloudSyncService: Fetch all users failed. Status: ${response.statusCode}, Body: ${response.body}');
       }
     } catch (e) {
       debugPrint('CloudSyncService: Fetch all users error: $e');

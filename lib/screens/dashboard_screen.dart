@@ -1103,7 +1103,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   Widget build(BuildContext context) {
     final currentUser = AuthService.instance.currentUser;
-    final isAdmin = AuthService.isAdmin(currentUser?.email);
+    final isAdmin = AuthService.isCurrentUserAdmin(currentUser?.email);
     return Scaffold(
       backgroundColor: const Color(0xFF050510),
       body: Stack(

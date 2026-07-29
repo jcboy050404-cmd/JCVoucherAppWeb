@@ -51,7 +51,7 @@ class AuthService {
   // ── Admin Config ─────────────────────────────────────────────────────────
 
   /// Returns true if the provided email is an authorized Admin account.
-  static bool isAdmin(String? email) {
+  static bool isCurrentUserAdmin(String? email) {
     if (email == null) return false;
     final clean = email.trim().toLowerCase();
     final currentEmail = instance.currentUser?.email.toLowerCase();
@@ -146,9 +146,10 @@ class AuthService {
     final String clientId = dotenv.env['GOOGLE_OAUTH_CLIENT_ID_WINDOWS'] ?? '';
     final String clientSecret = dotenv.env['GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS'] ?? '';
 
+    HttpServer? server;
     try {
       // 1. Start a local server to listen for the redirect
-      final server = await HttpServer.bind('127.0.0.1', 0);
+      server = await HttpServer.bind('127.0.0.1', 0);
       final redirectUri = 'http://127.0.0.1:${server.port}';
 
       // 2. Open browser for Google Sign-In
@@ -162,12 +163,11 @@ class AuthService {
       });
 
       if (!await launchUrl(authUrl)) {
-        await server.close();
         return null;
       }
 
       // 3. Wait for the redirect request from the browser
-      final request = await server.first;
+      final request = await server.first.timeout(const Duration(seconds: 120));
       final code = request.uri.queryParameters['code'];
 
       // Send a response to the browser so the user knows they can close the tab
@@ -185,7 +185,6 @@ class AuthService {
           </html>
         ''');
       await request.response.close();
-      await server.close();
 
       if (code == null) {
         return null; // User cancelled or error
@@ -235,6 +234,8 @@ class AuthService {
     } catch (e) {
       debugPrint('AuthService: Windows OAuth error: $e');
       return null;
+    } finally {
+      await server?.close();
     }
   }
 

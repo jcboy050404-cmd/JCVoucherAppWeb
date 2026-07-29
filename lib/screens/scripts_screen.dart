@@ -61,6 +61,8 @@ class _ScriptsScreenState extends State<ScriptsScreen> {
     }
   }
 
+
+
   Future<void> _showScriptDialog({RouterScript? script}) async {
     final isEdit = script != null;
     final nameCtrl = TextEditingController(text: script?.name ?? '');
@@ -246,6 +248,7 @@ class _ScriptsScreenState extends State<ScriptsScreen> {
           ),
         ),
         actions: [
+
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
             onPressed: _loadScripts,

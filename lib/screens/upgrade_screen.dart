@@ -480,7 +480,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                                   ),
                                   
                                   // Admin Approval Panel
-                                  if (AuthService.isAdmin(AuthService.instance.currentUser?.email)) ...[
+                                  if (AuthService.isCurrentUserAdmin(AuthService.instance.currentUser?.email)) ...[
                                     const SizedBox(height: 16),
                                     const Divider(color: Colors.white12, height: 1),
                                     const SizedBox(height: 20),

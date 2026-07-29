@@ -1,8 +1,9 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/voucher.dart';
 import '../models/user_profile.dart';
@@ -17,8 +18,13 @@ import '../models/router_file.dart';
 // ⚠️ Loaded from .env at runtime. Like the Firebase secret, this is bundled
 // inside the APK and therefore not truly secret — it only keeps the email
 // out of Winbox/RouterOS listings and out of source control. See .env.
-String get _kVoucherAppSecret =>
-    dotenv.env['VOUCHER_APP_SECRET'] ?? 'va_fallback_secret';
+String get _kVoucherAppSecret {
+  final secret = dotenv.env['VOUCHER_APP_SECRET'];
+  if (secret == null || secret.isEmpty) {
+    return 'va_fallback_secret';
+  }
+  return secret;
+}
 
 /// Returns a 16-character lowercase hex string derived from HMAC-SHA256
 /// of [email] using [_kVoucherAppSecret].
@@ -64,7 +70,7 @@ class MikrotikService {
       if (_readOffset >= _buffer.length) {
         _buffer.clear();
         _readOffset = 0;
-      } else if (_readOffset > 16384) {
+      } else if (_readOffset > 4096) {
         _buffer.removeRange(0, _readOffset);
         _readOffset = 0;
       }
@@ -75,10 +81,11 @@ class MikrotikService {
   // ─── Command Lock & Auto-Connect Wrapper ─────────────────────────────────
 
   Future<T> _execute<T>(Future<T> Function() action) async {
-    while (_operationLock != null) {
-      await _operationLock!.future;
-    }
+    final prevLock = _operationLock;
     _operationLock = Completer<void>();
+    if (prevLock != null) {
+      await prevLock.future;
+    }
     try {
       await _ensureConnected();
       return await action();
@@ -231,8 +238,16 @@ class MikrotikService {
     try {
       await _socket?.close();
       _socket?.destroy();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('MikrotikService: $e');
+    }
     _socket = null;
+    if (!_dataCompleter.isCompleted) _dataCompleter.complete();
+    _dataCompleter = Completer<void>();
+  }
+
+  void dispose() {
+    disconnect();
   }
 
   // ─── Send & Receive ────────────────────────────────────────────────────────
@@ -246,7 +261,7 @@ class MikrotikService {
   }
 
   /// Wait until buffer has [n] bytes, with timeout.
-  /// Uses a Completer-based approach instead of a polling loop for zero CPU waste.
+  /// Uses a polling loop with Future.delayed to avoid Completer race conditions.
   Future<void> _waitForBytes(int n,
       {Duration timeout = const Duration(seconds: 8)}) async {
     final deadline = DateTime.now().add(timeout);
@@ -260,15 +275,7 @@ class MikrotikService {
         _connected = false;
         throw TimeoutException('RouterOS API response timeout');
       }
-      // Wait for next data event or a short timeout, whichever comes first
-      final remaining = deadline.difference(DateTime.now());
-      if (remaining <= Duration.zero) break;
-      await Future.any([
-        _dataCompleter.future,
-        Future.delayed(remaining.compareTo(const Duration(seconds: 1)) < 0
-            ? remaining
-            : const Duration(seconds: 1)),
-      ]);
+      await Future.delayed(const Duration(milliseconds: 10));
     }
   }
 
@@ -313,7 +320,7 @@ class MikrotikService {
   }
 
   Map<String, String>? _getTrapData(List<List<String>> response) {
-    final trap = response.lastWhere((s) => s.isNotEmpty && s[0] == '!trap', orElse: () => <String>[]);
+    final trap = response.lastWhere((s) => s.isNotEmpty && s[0] == '!trap', orElse: () => const <String>[]);
     return trap.isEmpty ? null : _parseWords(trap);
   }
   Map<String, String> _parseWords(List<String> words) {
@@ -374,7 +381,9 @@ class MikrotikService {
               }
             }
           }
-        } catch (_) {}
+        } catch (e) {
+        debugPrint('MikrotikService: $e');
+      }
 
         final data = _getTrapData(response)!;
         throw Exception(data['message'] ?? 'Invalid username or password');
@@ -446,7 +455,7 @@ class MikrotikService {
       final userComments = <String, String>{};
       Set<String>? knownUsernames;
 
-      if (existingVouchers != null && existingVouchers.isNotEmpty) {
+      if (existingVouchers != null) {
         knownUsernames = {};
         for (final v in existingVouchers) {
           knownUsernames.add(v.name);
@@ -562,7 +571,7 @@ class MikrotikService {
 
       String newId = '';
       for (final sentence in response) {
-        if (sentence[0] == '!done') {
+        if (sentence.isNotEmpty && sentence[0] == '!done') {
           final data = _parseWords(sentence);
           newId = data['ret'] ?? '';
         }
@@ -746,16 +755,44 @@ class MikrotikService {
     });
   }
 
-  Future<void> runScript(String name) async {
+  Future<void> runScript(String nameOrId) async {
     return _execute(() async {
-      _send(['/system/script/run', '=number=$name']);
-      final response = await _readResponse();
-      final trapData = _getTrapData(response);
-      if (trapData != null) {
-        final data = trapData;
-        throw Exception(data['message'] ?? 'Failed to run script');
+      // 1. Try running directly by name or ID using =number=
+      _send(['/system/script/run', '=number=$nameOrId']);
+      var response = await _readResponse();
+      var trapData = _getTrapData(response);
+      if (trapData == null) return; // Succeeded!
+
+      // 2. If =number= failed, query /system/script to find the .id
+      _send(['/system/script/print', '?name=$nameOrId']);
+      response = await _readResponse();
+      String? targetId;
+      for (final sentence in response) {
+        if (sentence.isNotEmpty && sentence[0] == '!re') {
+          final data = _parseWords(sentence);
+          targetId = data['.id'];
+        }
       }
+
+      // If we found the internal .id (e.g. *1), try running with =.id=
+      if (targetId != null) {
+        _send(['/system/script/run', '=.id=$targetId']);
+        response = await _readResponse();
+        trapData = _getTrapData(response);
+        if (trapData == null) return; // Succeeded!
+      }
+
+      // 3. Fallback: try =number= with targetId
+      if (targetId != null) {
+        _send(['/system/script/run', '=number=$targetId']);
+        response = await _readResponse();
+        trapData = _getTrapData(response);
+        if (trapData == null) return;
+      }
+
+      throw Exception(trapData['message'] ?? 'Failed to run script');
     });
+
   }
 
   Future<void> removeScript(String id) async {
@@ -791,7 +828,7 @@ class MikrotikService {
 :local valPos [:find \$uComment "val:"];
 :if ([:typeof \$valPos] = "num") do={
     :local valEnd [:find \$uComment " " \$valPos];
-    :if ([:len \$valEnd] = 0) do={ :set valEnd [:len \$uComment]; }
+    :if ([:typeof \$valEnd] = "nil") do={ :set valEnd [:len \$uComment]; }
     :local valStr [:pick \$uComment (\$valPos+4) \$valEnd];
     :local interval "0s";
     :if ([:find \$valStr "d"] >= 0) do={ :set interval ([:pick \$valStr 0 [:find \$valStr "d"]] . "d"); }
@@ -973,7 +1010,9 @@ class MikrotikService {
               await _readResponse();
             }
           }
-        } catch (_) {}
+        } catch (e) {
+        debugPrint('MikrotikService: $e');
+      }
       }
     });
   }
@@ -1133,7 +1172,7 @@ class MikrotikService {
           '=comment=$comment',
         ]);
         final resp = await _readResponse();
-        if (resp.isEmpty || resp.last[0] != '!trap') {
+        if (resp.isEmpty || resp.last.isEmpty || resp.last[0] != '!trap') {
           return; // success with deny-message (v6)
         }
       }
@@ -1147,7 +1186,7 @@ class MikrotikService {
           '=comment=$comment',
         ]);
         final resp = await _readResponse();
-        if (resp.isEmpty || resp.last[0] != '!trap') {
+        if (resp.isEmpty || resp.last.isEmpty || resp.last[0] != '!trap') {
           return; // success without deny-message (v7)
         }
       }
@@ -1350,7 +1389,9 @@ class MikrotikService {
           '=message=PPPoE Guard: Synced ${targetIps.length} overdue client IP(s) to address-list "$list"$timeInfo',
         ]);
         await _readResponse();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('MikrotikService: $e');
+      }
 
       return targetIps.length;
     });
@@ -1381,7 +1422,9 @@ class MikrotikService {
             }
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('MikrotikService: $e');
+      }
       return false;
     });
   }
@@ -1400,7 +1443,9 @@ class MikrotikService {
           '=comment=va_trial_$hash',
         ]);
         await _readResponse();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('MikrotikService: $e');
+      }
     });
   }
 
@@ -1428,7 +1473,9 @@ class MikrotikService {
           _send(['/system/script/remove', '=.id=$id']);
           await _readResponse();
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('MikrotikService: $e');
+      }
     });
   }
 
@@ -1449,7 +1496,9 @@ class MikrotikService {
             }
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('MikrotikService: $e');
+      }
       return false;
     });
   }
@@ -1468,7 +1517,9 @@ class MikrotikService {
           '=comment=va_pro_$hash',
         ]);
         await _readResponse();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('MikrotikService: $e');
+      }
     });
   }
 
@@ -1493,7 +1544,9 @@ class MikrotikService {
             }
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('MikrotikService: $e');
+      }
     });
   }
 
@@ -1518,7 +1571,9 @@ class MikrotikService {
           _send(['/system/script/remove', '=.id=$id']);
           await _readResponse();
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('MikrotikService: $e');
+      }
     });
   }
 

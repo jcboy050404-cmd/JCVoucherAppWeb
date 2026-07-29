@@ -278,7 +278,6 @@ class TrialService {
     if (service != null && service.isConnected) {
       await service.removeAllProFlags();
     }
-    await CloudSyncService.resetAllProInCloud();
   }
 }
 

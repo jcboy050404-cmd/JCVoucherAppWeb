@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'notification_service.dart';
 
 class ClientBillingInfo {
   final String username;
@@ -59,6 +60,12 @@ class PppoeBillingService {
     final prefs = await SharedPreferences.getInstance();
     final jsonMap = map.map((k, v) => MapEntry(k, v.toJson()));
     await prefs.setString(_key, jsonEncode(jsonMap));
+
+    if (dueDate != null) {
+      await NotificationService().scheduleDueDateNotification(username, dueDate);
+    } else {
+      await NotificationService().cancelNotification(username);
+    }
   }
 
   /// Adds exactly one calendar month to [baseDate], clamping the day to the
