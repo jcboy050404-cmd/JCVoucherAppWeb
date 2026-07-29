@@ -115,6 +115,7 @@ class VoucherPdfService {
     PdfPageFormat? customFormat,
     Uint8List? logoBytes,
     PdfColor? primaryColor,
+    int targetTicketsPerPage = 21,
   }) async {
     final pdf = pw.Document();
     final isThermal = paperSize.isThermal;
@@ -184,6 +185,7 @@ class VoucherPdfService {
         customFormat: customFormat,
         logoBytes: logoBytes,
         primaryColor: primaryColor ?? PdfColors.green,
+        targetTicketsPerPage: targetTicketsPerPage,
       );
     }
 
@@ -1919,6 +1921,7 @@ class VoucherPdfService {
     PdfPageFormat? customFormat,
     Uint8List? logoBytes,
     PdfColor primaryColor = PdfColors.green,
+    int targetTicketsPerPage = 21,
   }) async {
     final pdf = pw.Document();
     final isThermal = paperSize.isThermal;
@@ -1959,19 +1962,42 @@ class VoucherPdfService {
       );
     } else {
       var format = (paperSize == VoucherPaperSize.custom && customFormat != null) ? customFormat : paperSize.pdfFormat;
-      const int cols = 3; // 3 columns for premium template
-      const double cellH = 125.0;
+      
       const double headerHeight = 16.0;
       const double headerSpacing = 4.0;
-      const double colSpacing = 8.0;
-      const double rowSpacing = 8.0;
+      const double colSpacing = 0.0;
+      const double rowSpacing = 0.0;
 
       final double usableWidth = format.width - 24;
       final double usableHeight = format.height - 24;
-      final double cellW = (usableWidth - (cols - 1) * colSpacing) / cols;
-
       final double gridUsableH = usableHeight - headerHeight - headerSpacing;
-      final int rows = ((gridUsableH + rowSpacing) / (cellH + rowSpacing)).floor().clamp(1, 30);
+
+      // --- SMART GRID OPTIMIZER ---
+      int cols = 3;
+      int rows = 7;
+      double targetRatio = 185.0 / 125.0; // Base Premium Ticket Aspect Ratio
+      double bestDiff = double.infinity;
+
+      for (int c = 1; c <= targetTicketsPerPage; c++) {
+        int r = (targetTicketsPerPage / c).ceil();
+        
+        double cw = (usableWidth - (c - 1) * colSpacing) / c;
+        double ch = (gridUsableH - (r - 1) * rowSpacing) / r;
+        
+        if (cw <= 0 || ch <= 0) continue;
+        
+        double ratio = cw / ch;
+        double diff = (ratio - targetRatio).abs();
+        
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          cols = c;
+          rows = r;
+        }
+      }
+
+      final double cellW = (usableWidth - (cols - 1) * colSpacing) / cols;
+      final double cellH = (gridUsableH - (rows - 1) * rowSpacing) / rows;
       final int perPage = cols * rows;
       final int totalPages = (vouchers.length / perPage).ceil().clamp(1, 9999);
 
@@ -2006,18 +2032,29 @@ class VoucherPdfService {
                         final idx = entry.key;
                         final voucher = entry.value;
                         final overallIndex = (p * perPage) + idx + 1;
-                        return _buildPremiumSheetTicket(
-                          voucher: voucher,
+                        return pw.Container(
                           width: cellW,
                           height: cellH,
-                          baseFont: baseFont,
-                          boldFont: boldFont,
-                          hotspotName: hotspotName,
-                          loginUrl: loginUrl,
-                          footerNote: footerNote,
-                          logoBytes: logoBytes,
-                          primaryColor: primaryColor,
-                          overallIndex: overallIndex,
+                          child: pw.FittedBox(
+                            fit: pw.BoxFit.contain,
+                            child: pw.SizedBox(
+                              width: 185.0,
+                              height: 125.0,
+                              child: _buildPremiumSheetTicket(
+                                voucher: voucher,
+                                width: 185.0,
+                                height: 125.0,
+                                baseFont: baseFont,
+                                boldFont: boldFont,
+                                hotspotName: hotspotName,
+                                loginUrl: loginUrl,
+                                footerNote: footerNote,
+                                logoBytes: logoBytes,
+                                primaryColor: primaryColor,
+                                overallIndex: overallIndex,
+                              ),
+                            ),
+                          ),
                         );
                       }).toList(),
                     ),
@@ -2061,9 +2098,8 @@ class VoucherPdfService {
     return pw.Container(
       width: width,
       height: height,
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey500, width: 1),
-      ),
+      color: PdfColors.black,
+      padding: const pw.EdgeInsets.all(1.0),
       child: pw.Column(
         children: [
           pw.Expanded(

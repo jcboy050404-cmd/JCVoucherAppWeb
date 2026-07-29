@@ -19,6 +19,7 @@ void showVoucherPrintPreview(
 ) {
   VoucherPaperSize selectedPaper = VoucherPaperSize.a4;
   VoucherTemplate selectedTemplate = VoucherTemplate.standard;
+  int targetTicketsPerPage = 21;
   final hotspotCtrl =
       TextEditingController(text: 'JOEMIA WiFi Hotspot');
   final loginUrlCtrl =
@@ -151,6 +152,24 @@ void showVoucherPrintPreview(
                                       )
                                     ],
                                   ],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Tickets per Page: $targetTicketsPerPage',
+                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
+                                ),
+                                Slider(
+                                  value: targetTicketsPerPage.toDouble(),
+                                  min: 10,
+                                  max: 100,
+                                  divisions: 90,
+                                  activeColor: const Color(0xFF00BFFF),
+                                  inactiveColor: Colors.white24,
+                                  onChanged: (val) {
+                                    updateStates(() {
+                                      targetTicketsPerPage = val.toInt();
+                                    });
+                                  },
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
@@ -448,6 +467,7 @@ void showVoucherPrintPreview(
                         customHeightCtrl.text,
                         logoBytes,
                         selectedColor.toARGB32(),
+                        targetTicketsPerPage,
                       )),
                       build: (format) {
                         PdfPageFormat? customFormat;
@@ -473,6 +493,7 @@ void showVoucherPrintPreview(
                           customFormat: customFormat,
                           logoBytes: logoBytes,
                           primaryColor: templateColors[selectedColor],
+                          targetTicketsPerPage: targetTicketsPerPage,
                         );
                       },
                       allowPrinting: false,
@@ -517,6 +538,7 @@ void showVoucherPrintPreview(
                               customFormat: customFormat,
                               logoBytes: logoBytes,
                               primaryColor: templateColors[selectedColor],
+                              targetTicketsPerPage: targetTicketsPerPage,
                             );
                             await Printing.sharePdf(
                               bytes: pdfBytes,
@@ -583,6 +605,7 @@ void showVoucherPrintPreview(
                                 customFormat: customFormat,
                                 logoBytes: logoBytes,
                                 primaryColor: templateColors[selectedColor],
+                                targetTicketsPerPage: targetTicketsPerPage,
                               ),
                               name:
                                   'vouchers_${selectedPaper.shortLabel}_${vouchers.length}',
