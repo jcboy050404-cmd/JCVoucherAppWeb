@@ -154,7 +154,7 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
           ),
         ],
       ),
-      body: Responsive.constrain(Column(
+      body: Column(
         children: [
           // Search box
           Padding(
@@ -215,11 +215,11 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                             backgroundColor: const Color(0xFF161626),
                             child: GridView.builder(
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
+                              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 350,
                                 crossAxisSpacing: 12,
                                 mainAxisSpacing: 12,
-                                childAspectRatio: 0.53,
+                                mainAxisExtent: 280,
                               ),
                               itemCount: _filteredActive.length,
                               itemBuilder: (context, i) {
@@ -439,7 +439,7 @@ class _ActiveVouchersScreenState extends State<ActiveVouchersScreen> {
                           ),
           ),
         ],
-      )),
+      ),
     );
   }
 }

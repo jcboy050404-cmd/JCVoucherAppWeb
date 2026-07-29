@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'dart:ui' show ImageFilter;
+import 'dart:async';
+import 'dart:math';
 import '../main.dart';
 import '../services/mikrotik_service.dart';
 import '../services/trial_service.dart';
@@ -24,6 +28,7 @@ import 'pppoe_screen.dart';
 import 'file_explorer_screen.dart';
 import '../widgets/top_toast.dart';
 import '../widgets/print_preview_helper.dart';
+import '../widgets/responsive_layout.dart';
 
 class DashboardScreen extends StatefulWidget {
   final MikrotikService service;
@@ -43,12 +48,20 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _trialLocked = false;
   bool _isPro = false;
   String? _proExpiresAt;
-  bool _pppoeUnlocked = false;
-  bool _remoteConfigUnlocked = false;
   bool _fileManagerUnlocked = false;
+
+  Timer? _trafficTimer;
+  String? _monitoredInterface;
+  List<FlSpot> _rxSpots = [];
+  List<FlSpot> _txSpots = [];
+  double _timeCounter = 0;
+  double _maxTrafficY = 10.0;
+  Map<String, String>? _systemResource;
 
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
+  
+  int _desktopSelectedIndex = 0;
 
   @override
   void initState() {
@@ -77,6 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   void dispose() {
     routeObserver.unsubscribe(this);
     _fadeCtrl.dispose();
+    _trafficTimer?.cancel();
     super.dispose();
   }
 
@@ -103,6 +117,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       final isPro = await TrialService.isPro(currentUserEmail);
       final proExpiresAt = await TrialService.getProExpiration(currentUserEmail);
       final settings = await CloudSyncService.getGlobalSettings();
+      
+      final sysRes = await widget.service.getResourceInfo();
+      final interfaces = await widget.service.getInterfaces();
       if (!mounted) return;
       setState(() {
         _vouchers = vouchers;
@@ -110,12 +127,13 @@ class _DashboardScreenState extends State<DashboardScreen>
         _trialLocked = trialLocked;
         _isPro = isPro;
         _proExpiresAt = proExpiresAt;
-        _pppoeUnlocked = settings['pppoe_unlocked'] == true;
-        _remoteConfigUnlocked = settings['remote_config_unlocked'] == true;
         _fileManagerUnlocked = settings['file_manager_unlocked'] == true;
+        _systemResource = sysRes;
         _loading = false;
       });
       _fadeCtrl.forward(from: 0);
+      
+      _startTrafficMonitoring(interfaces);
 
       if (currentUserEmail != null) {
         final prefs = await SharedPreferences.getInstance();
@@ -149,6 +167,46 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  void _startTrafficMonitoring(List<String> interfaces) {
+    if (interfaces.isEmpty) return;
+    _monitoredInterface = interfaces.first;
+    _trafficTimer?.cancel();
+    _trafficTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      try {
+        final traffic = await widget.service.getTraffic(_monitoredInterface!);
+        final sysRes = await widget.service.getResourceInfo();
+        final rxStr = traffic['rx-bits-per-second'] ?? '0';
+        final txStr = traffic['tx-bits-per-second'] ?? '0';
+        final rxMbps = double.parse(rxStr) / 1000000;
+        final txMbps = double.parse(txStr) / 1000000;
+
+        if (mounted) {
+          setState(() {
+            _systemResource = sysRes;
+            _timeCounter += 1;
+            _rxSpots.add(FlSpot(_timeCounter, rxMbps));
+            _txSpots.add(FlSpot(_timeCounter, txMbps));
+            
+            if (_rxSpots.length > 20) {
+              _rxSpots.removeAt(0);
+              _txSpots.removeAt(0);
+            }
+            
+            final maxRx = _rxSpots.isEmpty ? 0.0 : _rxSpots.map((e) => e.y).reduce(max);
+            final maxTx = _txSpots.isEmpty ? 0.0 : _txSpots.map((e) => e.y).reduce(max);
+            _maxTrafficY = max(10.0, max(maxRx, maxTx) * 1.2);
+          });
+        }
+      } catch (e) {
+        // Ignore polling errors
+      }
+    });
+  }
+
   String _formatExpDate(String isoString) {
     try {
       final date = DateTime.parse(isoString);
@@ -170,8 +228,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   int get _totalVouchers => _vouchers.length;
   int get _activeCount => _activeSessions.length;
   int get _usedCount => _vouchers.where((v) => v.isUsed).length;
-  int get _availableCount =>
-      _vouchers.where((v) => !v.isUsed && !v.disabled).length;
+  int get _availableCount => _vouchers.where((v) => !v.isUsed && !v.disabled).length;
+  int get _expiredCount => _vouchers.where((v) => v.disabled && !v.isUsed).length;
 
   double get _todaySales {
     final now = DateTime.now();
@@ -257,20 +315,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
       childAspectRatio: cols > 2 ? 1.15 : 1.25,
-      children: children,
-    );
-  }
-
-  /// Responsive grid for the six quick-action cards.
-  Widget _quickActionsGrid(List<Widget> children) {
-    final cols = Responsive(context).gridColumns(itemWidth: 300).clamp(2, 3);
-    return GridView.count(
-      crossAxisCount: cols,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: cols > 2 ? 1.4 : 1.18,
       children: children,
     );
   }
@@ -520,35 +564,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     showVoucherPrintPreview(context, vouchers);
   }
 
-  Widget _buildActionItem({
-    required IconData icon,
-    required String label,
-    required List<Color> gradient,
-    required VoidCallback onTap,
-  }) {
-    if (_trialLocked) {
-      return _LockedActionCard(
-        icon: icon,
-        label: label,
-        gradient: const [
-          Color(0xFF444466),
-          Color(0xFF333355),
-        ],
-        onTap: () async {
-          final upgraded = await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => UpgradeScreen(service: widget.service)),
-          );
-          if (upgraded == true) _loadData();
-        },
-      );
-    }
-    return _QuickActionCard(
-      icon: icon,
-      label: label,
-      gradient: gradient,
-      onTap: onTap,
-    );
-  }
+
 
   void _showProWelcomePopup() {
     showDialog(
@@ -1102,6 +1118,687 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    return ResponsiveLayout(
+      mobile: _buildMobileLayout(context),
+      desktop: _buildDesktopLayout(context),
+    );
+  }
+
+  Widget _buildDesktopLayout(BuildContext context) {
+    final currentUser = AuthService.instance.currentUser;
+    final isAdmin = AuthService.isCurrentUserAdmin(currentUser?.email);
+    
+    return Scaffold(
+      backgroundColor: const Color(0xFF090915),
+      body: Stack(
+        children: [
+          // Deep Space Background Glows
+          Positioned(top: -150, left: -100, child: _buildGlowOrb(const Color(0xFF00BFFF), 400)),
+          Positioned(bottom: -200, right: -100, child: _buildGlowOrb(const Color(0xFF7B2FBE), 600)),
+          
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Floating Glassmorphism Sidebar
+              Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      width: 260,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.03),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                        boxShadow: [
+                          BoxShadow(color: const Color(0xFF00BFFF).withValues(alpha: 0.1), blurRadius: 40, spreadRadius: -10),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 32),
+                          // App Icon Header
+                          Container(
+                            width: 72, height: 72,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF00BFFF), Color(0xFF7B2FBE)],
+                                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(color: const Color(0xFF00BFFF).withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8)),
+                              ],
+                            ),
+                            child: const Icon(Icons.router_rounded, color: Colors.white, size: 36),
+                          ),
+                          const SizedBox(height: 24),
+                          
+                          // User Profile Chip
+                          GestureDetector(
+                            onTap: _disconnect,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 20),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(100),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: const Color(0xFF00C853).withValues(alpha: 0.2),
+                                    child: Text(
+                                      (currentUser?.displayName ?? 'A').substring(0, 1).toUpperCase(),
+                                      style: GoogleFonts.poppins(color: const Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text('Admin', style: GoogleFonts.poppins(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF00C853).withValues(alpha: 0.2),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.5)),
+                                              ),
+                                              child: Text('PRO ⚡', style: GoogleFonts.poppins(color: const Color(0xFF00C853), fontSize: 9, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(Icons.logout_rounded, color: Color(0xFFFF5252), size: 18),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          
+                          Expanded(
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              child: Column(
+                                children: [
+                                  _buildSidebarItem(0, Icons.dashboard_rounded, 'Dashboard', isNew: false),
+                                  _buildSidebarItem(1, Icons.add_circle_outline_rounded, 'Generate', isNew: false),
+                                  _buildSidebarItem(2, Icons.confirmation_number_outlined, 'Vouchers', isNew: false),
+                                  _buildSidebarItem(3, Icons.people_alt_outlined, 'Active Sessions', isNew: false),
+                                  _buildSidebarItem(4, Icons.speed_rounded, 'Profiles', isNew: false),
+                                  _buildSidebarItem(5, Icons.code_rounded, 'Scripts', isNew: false),
+                                  _buildSidebarItem(6, Icons.network_check_rounded, 'PPPoE', isNew: true),
+                                  if (_fileManagerUnlocked || isAdmin)
+                                    _buildSidebarItem(7, Icons.folder_open_rounded, 'Files', isNew: true),
+                                  _buildSidebarItem(-1, Icons.print_rounded, 'Print', isAction: true, onTap: _showPrintOptionsModal),
+                                  if (isAdmin)
+                                    _buildSidebarItem(-2, Icons.settings_remote_rounded, 'Remote Config', isAction: true, onTap: _showRemoteConfigGuide)
+                                  else
+                                    _buildSidebarItem(-2, Icons.lock_outline_rounded, 'Remote Config', isAction: true, onTap: () {
+                                      TopToast.show(context, 'Remote Config is currently locked by the Admin', backgroundColor: const Color(0xFFF57C00));
+                                    }),
+                                  const SizedBox(height: 20),
+                                ],
+                              ),
+                            ),
+                          ),
+                          _buildSidebarItem(-3, Icons.logout_rounded, 'Logout', isAction: true, onTap: _disconnect),
+                          const SizedBox(height: 24),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              
+              // Main content area
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 24, 24, 24),
+                  child: IndexedStack(
+                    index: _desktopSelectedIndex,
+                    children: [
+                      _buildDesktopDashboardHome(context), // Glassmorphism dashboard
+                      GenerateScreen(service: widget.service),
+                      VoucherListScreen(service: widget.service),
+                      ActiveVouchersScreen(service: widget.service),
+                      ProfileListScreen(service: widget.service),
+                      ScriptListScreen(service: widget.service),
+                      PppoeScreen(service: widget.service),
+                      MikrotikFileExplorerScreen(service: widget.service),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlowOrb(Color color, double size) {
+    return Container(
+      width: size, height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [color.withValues(alpha: 0.15), Colors.transparent],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSidebarItem(int index, IconData icon, String label, {bool isAction = false, VoidCallback? onTap, bool isNew = false}) {
+    final isSelected = !isAction && _desktopSelectedIndex == index;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap ?? () {
+            setState(() => _desktopSelectedIndex = index);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: isSelected ? BoxDecoration(
+              gradient: LinearGradient(
+                colors: [const Color(0xFF00BFFF).withValues(alpha: 0.2), const Color(0xFF00BFFF).withValues(alpha: 0.05)],
+                begin: Alignment.centerLeft, end: Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border(left: BorderSide(color: const Color(0xFF00BFFF), width: 3)),
+            ) : null,
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: isSelected ? const Color(0xFF00BFFF) : Colors.white54,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: isSelected ? Colors.white : Colors.white54,
+                    ),
+                  ),
+                ),
+                if (isNew)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF9800).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.5)),
+                    ),
+                    child: Text('new', style: GoogleFonts.poppins(color: const Color(0xFFFF9800), fontSize: 9, fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopDashboardHome(BuildContext context) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left Column (MikroTik Status + Overview + Traffic Flow)
+              Expanded(
+                flex: 5,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildGlassCard(
+                      child: _buildMikrotikStatusCard(),
+                      borderColor: const Color(0xFF00BFFF),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildGlassCard(
+                      child: _buildVoucherOverviewCard(),
+                      borderColor: const Color(0xFF7B2FBE),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildGlassCard(
+                      child: _buildTrafficFlowCard(),
+                      borderColor: const Color(0xFF00BFFF),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 20),
+              // Right Column (Cloud Sync + Active Users + Logs)
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildGlassCard(
+                      child: _buildSalesMonitoringCard(),
+                      borderColor: const Color(0xFF7B2FBE),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildGlassCard(
+                      child: _buildActiveUsersTableCard(),
+                      borderColor: const Color(0xFF00C853),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildGlassCard(
+                      child: _buildLogsCard(),
+                      borderColor: const Color(0xFF00BFFF),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlassCard({required Widget child, required Color borderColor, double? height}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: height,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: borderColor.withValues(alpha: 0.5), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: borderColor.withValues(alpha: 0.1),
+                blurRadius: 30,
+                spreadRadius: -10,
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMikrotikStatusCard() {
+    final uptime = _systemResource?['uptime'] ?? '00:00:00';
+    final cpuLoad = _systemResource?['cpu-load'] ?? '0';
+    final freeMemoryStr = _systemResource?['free-memory'] ?? '0';
+    final totalMemoryStr = _systemResource?['total-memory'] ?? '0';
+    
+    final freeMem = double.tryParse(freeMemoryStr) ?? 0;
+    final totalMem = double.tryParse(totalMemoryStr) ?? 1;
+    final usedMem = totalMem - freeMem;
+    final ramLoad = (usedMem / totalMem * 100).toStringAsFixed(1);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('MikroTik Status', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 24),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(AuthService.instance.currentUser?.displayName ?? 'Router', style: GoogleFonts.poppins(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.edit_outlined, color: Colors.white54, size: 16),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(Icons.language_rounded, color: Colors.white54, size: 14),
+                      const SizedBox(width: 8),
+                      Text(widget.service.host, style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time_rounded, color: Colors.white54, size: 14),
+                      const SizedBox(width: 8),
+                      Text('Uptime: $uptime', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // CPU & RAM stats
+            SizedBox(
+              width: 150,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _buildResourceBar(Icons.developer_board_rounded, 'CPU Load', '$cpuLoad%', double.tryParse(cpuLoad) ?? 0, const Color(0xFF00BFFF)),
+                  const SizedBox(height: 16),
+                  _buildResourceBar(Icons.memory_rounded, 'RAM Usage', '$ramLoad%', double.tryParse(ramLoad) ?? 0, const Color(0xFF7B2FBE)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildResourceBar(IconData icon, String label, String value, double percentage, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Icon(icon, color: Colors.white54, size: 14),
+            const SizedBox(width: 4),
+            Text(label, style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12)),
+            const SizedBox(width: 8),
+            Text(value, style: GoogleFonts.poppins(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: 120,
+          height: 6,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          alignment: Alignment.centerLeft,
+          child: Container(
+            width: 120 * (percentage / 100).clamp(0.0, 1.0),
+            height: 6,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(3),
+              boxShadow: [
+                BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 4, offset: const Offset(0, 2)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSalesMonitoringCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Sales Monitoring', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            const Icon(Icons.monetization_on_rounded, color: Color(0xFF34A853), size: 20),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Today', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 14)),
+            Text('₱${_todaySales.toStringAsFixed(2)}', style: GoogleFonts.poppins(color: const Color(0xFF34A853), fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('This Month', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 14)),
+            Text('₱${_monthlySales.toStringAsFixed(2)}', style: GoogleFonts.poppins(color: const Color(0xFF00BFFF), fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Total', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 14)),
+            Text('₱${_totalSales.toStringAsFixed(2)}', style: GoogleFonts.poppins(color: const Color(0xFF7B2FBE), fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVoucherOverviewCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Voucher Overview', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            // Donut Chart Mock
+            SizedBox(
+              width: 120, height: 120,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  PieChart(
+                    PieChartData(
+                      sectionsSpace: 0,
+                      centerSpaceRadius: 40,
+                      startDegreeOffset: -90,
+                      sections: [
+                        PieChartSectionData(color: const Color(0xFF00BFFF), value: (_availableCount > 0 ? _availableCount : 15).toDouble(), title: '', radius: 20),
+                        PieChartSectionData(color: const Color(0xFF7B2FBE), value: (_usedCount > 0 ? _usedCount : 8).toDouble(), title: '', radius: 20),
+                        PieChartSectionData(color: Colors.white10, value: (_expiredCount > 0 ? _expiredCount : 5).toDouble(), title: '', radius: 20),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.confirmation_number_outlined, color: Color(0xFF00BFFF), size: 30),
+                ],
+              ),
+            ),
+            const SizedBox(width: 32),
+            Expanded(
+              child: Column(
+                children: [
+                  _buildLegendRow(const Color(0xFF00BFFF), 'Available', _availableCount),
+                  const SizedBox(height: 12),
+                  _buildLegendRow(const Color(0xFF7B2FBE), 'Used', _usedCount),
+                  const SizedBox(height: 12),
+                  _buildLegendRow(Colors.white54, 'Expired', _expiredCount),
+                  const SizedBox(height: 24),
+                  InkWell(
+                    onTap: () => setState(() => _desktopSelectedIndex = 1),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00BFFF).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF00BFFF).withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF00BFFF), size: 18),
+                          const SizedBox(width: 8),
+                          Text('Generate Vouchers', style: GoogleFonts.poppins(color: const Color(0xFF00BFFF), fontSize: 13, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegendRow(Color color, String label, int count) {
+    return Row(
+      children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 12),
+        Text(label, style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13)),
+        const Spacer(),
+        Text(count.toString(), style: GoogleFonts.poppins(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _buildActiveUsersTableCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Active Users', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(flex: 1, child: Text('User ID', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 11))),
+            Expanded(flex: 2, child: Text('IP Address', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 11))),
+            Expanded(flex: 2, child: Text('MAC Address', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 11))),
+            Expanded(flex: 2, child: Text('Active Since', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 11))),
+            Expanded(flex: 2, child: Text('Data Usage', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 11))),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Divider(color: Colors.white10, height: 1),
+        const SizedBox(height: 12),
+        if (_activeSessions.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Center(child: Text('No active users', style: GoogleFonts.poppins(color: Colors.white54))),
+          )
+        else
+          ..._activeSessions.take(5).map((u) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Expanded(flex: 1, child: Text(u.user.isNotEmpty ? u.user : 'Unknown', style: GoogleFonts.poppins(color: Colors.white, fontSize: 12))),
+                Expanded(flex: 2, child: Text(u.address.isNotEmpty ? u.address : '-', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12))),
+                Expanded(flex: 2, child: Text(u.macAddress.isNotEmpty ? u.macAddress : '-', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12))),
+                Expanded(flex: 2, child: Text(u.uptime.isNotEmpty ? u.uptime : '-', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12))),
+                Expanded(flex: 2, child: Text(u.bytesOut.isNotEmpty ? u.bytesOut : '-', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12))),
+              ],
+            ),
+          )).toList(),
+      ],
+    );
+  }
+
+  Widget _buildTrafficFlowCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Traffic Flow', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        Text('Bandwidth utilization for ${_monitoredInterface ?? 'interface'}', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12)),
+        const SizedBox(height: 24),
+        SizedBox(
+          height: 150,
+          child: LineChart(
+            LineChartData(
+              gridData: FlGridData(
+                show: true, drawVerticalLine: false,
+                getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withValues(alpha: 0.05), strokeWidth: 1),
+              ),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40, getTitlesWidget: (value, meta) => Text('${value.toStringAsFixed(1)} M', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 10)))),
+                bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              ),
+              borderData: FlBorderData(show: false),
+              minY: 0, maxY: _maxTrafficY,
+              lineBarsData: [
+                LineChartBarData(
+                  spots: _rxSpots.isEmpty ? const [FlSpot(0, 0)] : _rxSpots,
+                  isCurved: true,
+                  color: const Color(0xFF00BFFF),
+                  barWidth: 3,
+                  isStrokeCapRound: true,
+                  dotData: const FlDotData(show: false),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      colors: [const Color(0xFF00BFFF).withValues(alpha: 0.5), const Color(0xFF7B2FBE).withValues(alpha: 0.1)],
+                      begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+                LineChartBarData(
+                  spots: _txSpots.isEmpty ? const [FlSpot(0, 0)] : _txSpots,
+                  isCurved: true,
+                  color: const Color(0xFF7B2FBE),
+                  barWidth: 3,
+                  isStrokeCapRound: true,
+                  dotData: const FlDotData(show: false),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLogsCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('MikroTik Logs', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        Container(
+          height: 120,
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF060612),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          ),
+          child: SingleChildScrollView(
+            child: Text(
+              '''13:28:23-23:01:327 | MikroTik Logs test...
+13:28:33-23:02:327 | Network interface up
+13:28:22-33:08:327 | User admin logged in
+15:26-25-33:05:222 | DHCP lease assigned 192.168.8.44
+16:01:10-00:00:000 | Voucher generated 1x
+16:05:22-11:11:111 | System check ok''',
+              style: GoogleFonts.firaCode(color: const Color(0xFF00C853), fontSize: 11, height: 1.6),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileLayout(BuildContext context) {
     final currentUser = AuthService.instance.currentUser;
     final isAdmin = AuthService.isCurrentUserAdmin(currentUser?.email);
     return Scaffold(
@@ -1144,13 +1841,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
           SafeArea(
-            child: Responsive.constrain(
-              RefreshIndicator(
-                onRefresh: _loadData,
-                color: const Color(0xFF00BFFF),
-                backgroundColor: const Color(0xFF1A1A2E),
-                child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
+            child: RefreshIndicator(
+              onRefresh: _loadData,
+              color: const Color(0xFF00BFFF),
+              backgroundColor: const Color(0xFF1A1A2E),
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // ── App Bar ──────────────────────────────────────────────────
               SliverToBoxAdapter(
@@ -1544,7 +2240,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       // Constrain dashboard content width on tablets.
-                      Responsive.constrain(
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -1627,159 +2322,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ),
                         ]),
                       ),
-
-                      // ── Quick Actions Background Section ───────────────────
-                      _SectionCard(
-                        title: 'Quick Actions',
-                        icon: Icons.bolt_rounded,
-                        accentColor: const Color(0xFFFF9800),
-                        child: _quickActionsGrid([
-                          _buildActionItem(
-                            icon: Icons.add_circle_rounded,
-                            label: 'Generate\nVouchers',
-                            gradient: const [Color(0xFF00BFFF), Color(0xFF0066CC)],
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => GenerateScreen(service: widget.service)),
-                              );
-                              _loadData();
-                            },
-                          ),
-                          _buildActionItem(
-                            icon: Icons.list_alt_rounded,
-                            label: 'Voucher\nList',
-                            gradient: const [Color(0xFF7B2FBE), Color(0xFF4A1580)],
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => VoucherListScreen(service: widget.service)),
-                              );
-                              _loadData();
-                            },
-                          ),
-                          _buildActionItem(
-                            icon: Icons.style_rounded,
-                            label: 'User\nProfiles',
-                            gradient: const [Color(0xFFFF9800), Color(0xFFE65100)],
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => ProfileListScreen(service: widget.service)),
-                              );
-                              _loadData();
-                            },
-                          ),
-                          _buildActionItem(
-                            icon: Icons.code_rounded,
-                            label: 'Router\nScripts',
-                            gradient: const [Color(0xFF7B2FBE), Color(0xFF512DA8)],
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => ScriptListScreen(service: widget.service)),
-                              );
-                              _loadData();
-                            },
-                          ),
-                          Builder(
-                            builder: (context) {
-                              final isAdmin = AuthService.instance.currentUser?.isAdmin == true;
-                              if (isAdmin || _fileManagerUnlocked) {
-                                return _buildActionItem(
-                                  icon: Icons.folder_open_rounded,
-                                  label: 'File\nManager',
-                                  gradient: const [Color(0xFFE91E63), Color(0xFFC2185B)],
-                                  onTap: () async {
-                                    await Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => MikrotikFileExplorerScreen(service: widget.service)),
-                                    );
-                                  },
-                                );
-                              } else {
-                                return _buildActionItem(
-                                  icon: Icons.lock_outline_rounded,
-                                  label: 'File\nLocked',
-                                  gradient: const [Color(0xFF757575), Color(0xFF424242)],
-                                  onTap: () {
-                                    TopToast.show(context, 'File Manager is currently locked by the Admin', backgroundColor: const Color(0xFFF57C00));
-                                  },
-                                );
-                              }
-                            }
-                          ),
-                          _buildActionItem(
-                            icon: Icons.wifi_tethering_rounded,
-                            label: 'Active\nVouchers',
-                            gradient: const [Color(0xFF00E676), Color(0xFF00B0FF)],
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => ActiveVouchersScreen(service: widget.service)),
-                              );
-                              _loadData();
-                            },
-                          ),
-                          _buildActionItem(
-                            icon: Icons.print_rounded,
-                            label: 'Print\nVouchers',
-                            gradient: const [Color(0xFF00BFE0), Color(0xFF0099CC)],
-                            onTap: _showPrintOptionsModal,
-                          ),
-                          Builder(
-                            builder: (context) {
-                              final isAdmin = AuthService.instance.currentUser?.isAdmin == true;
-                              if (isAdmin || _pppoeUnlocked) {
-                                return _buildActionItem(
-                                  icon: Icons.alt_route_rounded,
-                                  label: 'PPPoE\nClients',
-                                  gradient: const [Color(0xFFBB86FC), Color(0xFF6200EE)],
-                                  onTap: () async {
-                                    await Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => PppoeScreen(service: widget.service)),
-                                    );
-                                    _loadData();
-                                  },
-                                );
-                              } else {
-                                return _buildActionItem(
-                                  icon: Icons.lock_outline_rounded,
-                                  label: 'PPPoE\nLocked',
-                                  gradient: const [Color(0xFF757575), Color(0xFF424242)], // Gray out
-                                  onTap: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'This feature is not available for now.',
-                                          style: GoogleFonts.poppins(fontSize: 12, color: Colors.white),
-                                        ),
-                                        backgroundColor: const Color(0xFFF57C00),
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                        duration: const Duration(seconds: 3),
-                                      ),
-                                    );
-                                  },
-                                );
-                              }
-                            }
-                          ),
-                          if (isAdmin || _remoteConfigUnlocked)
-                            _buildActionItem(
-                              icon: Icons.router_rounded,
-                              label: 'Remote\nConfig',
-                              gradient: const [Color(0xFFFF5252), Color(0xFFD32F2F)],
-                              onTap: _showRemoteConfigGuide,
-                            )
-                          else
-                            _buildActionItem(
-                              icon: Icons.lock_outline_rounded,
-                              label: 'Config\nLocked',
-                              gradient: const [Color(0xFF757575), Color(0xFF424242)],
-                              onTap: () {
-                                TopToast.show(context, 'Remote Config is currently locked by the Admin', backgroundColor: const Color(0xFFF57C00));
-                              },
-                            ),
-                        ]),
-                      ),
                           const SizedBox(height: 40),
                         ],
-                      ),
                       ),
                     ]),
                   ),
@@ -1787,7 +2331,6 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           ),
         ),
-      ),
       ),
         ],
       ),
@@ -1812,173 +2355,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
               ),
             ),
-    );
-  }
-}
-
-class _QuickActionCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final List<Color> gradient;
-  final VoidCallback onTap;
-
-  const _QuickActionCard({
-    required this.icon,
-    required this.label,
-    required this.gradient,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradient,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: gradient.first.withValues(alpha: 0.3),
-              blurRadius: 14,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: Colors.white, size: 22),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  height: 1.15,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A locked action card shown in trial mode — styled with a gradient border
-/// and a glowing lock badge to draw attention and prompt upgrade.
-class _LockedActionCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final List<Color> gradient;
-  final VoidCallback onTap;
-
-  const _LockedActionCard({
-    required this.icon,
-    required this.label,
-    required this.gradient,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(1.5),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A0E2E),
-            borderRadius: BorderRadius.circular(17),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Opacity(
-                      opacity: 0.5,
-                      child: Icon(icon, color: Colors.white, size: 24),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF9800).withValues(alpha: 0.18),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFFF9800).withValues(alpha: 0.5),
-                          width: 1,
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.lock_rounded,
-                        size: 10,
-                        color: Color(0xFFFF9800),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Opacity(
-                  opacity: 0.5,
-                  child: Text(
-                    label,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      height: 1.15,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Tap to upgrade',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
-                    fontSize: 9,
-                    color: const Color(0xFFFF9800),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

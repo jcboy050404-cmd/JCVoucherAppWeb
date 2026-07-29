@@ -1,4 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
 
@@ -10,12 +12,19 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
-    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-    
-    await flutterLocalNotificationsPlugin.initialize(
-      settings: initializationSettings,
-    );
+    try {
+      if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
+        return; // Skip on desktop/web to avoid missing plugin exceptions
+      }
+      const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+      
+      await flutterLocalNotificationsPlugin.initialize(
+        settings: initializationSettings,
+      );
+    } catch (e) {
+      debugPrint('Notification init failed: $e');
+    }
   }
 
   Future<void> requestPermissions() async {

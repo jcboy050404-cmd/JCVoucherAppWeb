@@ -82,7 +82,9 @@ class MikrotikService {
 
   Future<T> _execute<T>(Future<T> Function() action) async {
     final prevLock = _operationLock;
-    _operationLock = Completer<void>();
+    final myLock = Completer<void>();
+    _operationLock = myLock;
+    
     if (prevLock != null) {
       await prevLock.future;
     }
@@ -94,9 +96,10 @@ class MikrotikService {
       await disconnect();
       rethrow;
     } finally {
-      final lock = _operationLock;
-      _operationLock = null;
-      lock?.complete();
+      if (_operationLock == myLock) {
+        _operationLock = null;
+      }
+      myLock.complete();
     }
   }
 
@@ -408,6 +411,37 @@ class MikrotikService {
   }
 
   // ─── System Resource Telemetry ──────────────────────────────────────────────
+
+  Future<List<String>> getInterfaces() async {
+    return _execute(() async {
+      _send(['/interface/print']);
+      final response = await _readResponse();
+      List<String> names = [];
+      for (final block in response) {
+        if (block.isNotEmpty && block[0] == '!re') {
+          final props = _parseWords(block);
+          if (props.containsKey('name')) {
+            names.add(props['name']!);
+          }
+        }
+      }
+      return names;
+    });
+  }
+
+  Future<Map<String, String>> getTraffic(String interface) async {
+    return _execute(() async {
+      _send(['/interface/monitor-traffic', '=interface=$interface', '=once=']);
+      final response = await _readResponse();
+      Map<String, String> result = {'rx-bits-per-second': '0', 'tx-bits-per-second': '0'};
+      for (final block in response) {
+        if (block.isNotEmpty && block[0] == '!re') {
+          result = _parseWords(block);
+        }
+      }
+      return result;
+    });
+  }
 
   Future<Map<String, String>> getResourceInfo() async {
     return _execute(() async {

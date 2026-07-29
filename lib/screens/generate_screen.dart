@@ -1095,9 +1095,8 @@ class _GenerateScreenState extends State<GenerateScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D1A),
       body: SafeArea(
-        child: Responsive.constrain(
-          CustomScrollView(
-            slivers: [
+        child: CustomScrollView(
+          slivers: [
             // App Bar
             SliverToBoxAdapter(
               child: Padding(
@@ -2191,7 +2190,6 @@ class _GenerateScreenState extends State<GenerateScreen> {
             ),
           ],
         ),
-      ),
       ),
     );
   }

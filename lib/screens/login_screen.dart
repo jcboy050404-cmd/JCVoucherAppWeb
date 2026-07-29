@@ -11,10 +11,12 @@ import '../services/trial_service.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/force_update_service.dart';
 import '../responsive.dart';
+import '../widgets/responsive_layout.dart';
 import 'dashboard_screen.dart';
 import 'admin_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../widgets/top_toast.dart';
+import 'dart:ui' show ImageFilter;
 
 
 class LoginScreen extends StatefulWidget {
@@ -1269,6 +1271,13 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    return ResponsiveLayout(
+      mobile: _buildMobileLayout(),
+      desktop: _buildDesktopLayout(),
+    );
+  }
+
+  Widget _buildMobileLayout() {
     return Scaffold(
       backgroundColor: const Color(0xFF060612),
       body: Stack(
@@ -1326,6 +1335,88 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                         const SizedBox(height: 20),
                       ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF060612),
+      body: Stack(
+        children: [
+          // -- Background blobs --
+          Positioned(top: -150, right: -100, child: _blob(600, const Color(0xFF00BFFF), 0.12)),
+          Positioned(bottom: -150, left: -100, child: _blob(500, const Color(0xFF7B2FBE), 0.12)),
+          
+          // -- Content --
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 450),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161626).withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(
+                    color: const Color(0xFF00BFFF).withValues(alpha: 0.2),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 30,
+                      offset: const Offset(0, 15),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(32),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 48),
+                      physics: const BouncingScrollPhysics(),
+                      child: FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: SlideTransition(
+                          position: _slideAnimation,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // -- HERO BANNER --
+                              _buildHeroHeader(),
+
+                              const SizedBox(height: 32),
+                              
+                              // -- SIGN-IN CARD --
+                              _buildGoogleAuthCard(),
+                              
+                              const SizedBox(height: 24),
+
+                              // -- ROUTER SECTION --
+                              ValueListenableBuilder<GoogleUserModel?>(
+                                valueListenable: AuthService.instance.currentUserNotifier,
+                                builder: (context, googleUser, _) {
+                                  if (googleUser == null) {
+                                    return _buildLockedState();
+                                  }
+                                  return _buildRouterSection();
+                                },
+                              ),
+
+                              const SizedBox(height: 32),
+                              _buildFooter(),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),

@@ -381,8 +381,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D1A),
       body: SafeArea(
-        child: Responsive.constrain(
-          Column(
+        child: Column(
             children: [
               // ── Header ──────────────────────────────────────────────────────
               _buildHeader(),
@@ -423,7 +422,6 @@ class _VoucherListScreenState extends State<VoucherListScreen>
             ],
           ),
         ),
-      ),
     );
   }
 
@@ -866,11 +864,11 @@ class _VoucherListScreenState extends State<VoucherListScreen>
         backgroundColor: const Color(0xFF1A1A2E),
         child: GridView.builder(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 350,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 0.85,
+            mainAxisExtent: 220,
           ),
           // Caches items nearby for smoother scrolling
           itemCount: _filtered.length,
