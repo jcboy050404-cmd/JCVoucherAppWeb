@@ -12,7 +12,6 @@ import '../models/voucher.dart';
 import '../widgets/print_preview_helper.dart';
 import 'voucher_list_screen.dart';
 import 'upgrade_screen.dart';
-import '../responsive.dart';
 class GenerateScreen extends StatefulWidget {
   final MikrotikService service;
   const GenerateScreen({super.key, required this.service});

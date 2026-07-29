@@ -41,7 +41,7 @@ class MikrotikVendoDriver implements BaseVendoService {
       final now = DateTime.now();
       double sales = 0.0;
       for (final v in vouchers) {
-        if (!v.isUsed) continue;
+        if (!v.isUsed && !v.isExpired) continue;
         final act = v.activationDate;
         if (act != null &&
             act.year == now.year &&

@@ -227,14 +227,14 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   int get _totalVouchers => _vouchers.length;
   int get _activeCount => _activeSessions.length;
-  int get _usedCount => _vouchers.where((v) => v.isUsed).length;
+  int get _usedCount => _vouchers.where((v) => v.isUsed && !v.isExpired).length;
   int get _availableCount => _vouchers.where((v) => !v.isUsed && !v.disabled).length;
-  int get _expiredCount => _vouchers.where((v) => v.disabled && !v.isUsed).length;
+  int get _expiredCount => _vouchers.where((v) => v.isExpired || (v.disabled && !v.isUsed)).length;
 
   double get _todaySales {
     final now = DateTime.now();
     return _vouchers.where((v) {
-      if (!v.isUsed) return false;
+      if (!v.isUsed && !v.isExpired) return false;
       final act = v.activationDate;
       if (act == null) return false;
       return act.year == now.year &&
@@ -246,7 +246,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   double get _monthlySales {
     final now = DateTime.now();
     return _vouchers.where((v) {
-      if (!v.isUsed) return false;
+      if (!v.isUsed && !v.isExpired) return false;
       final act = v.activationDate;
       if (act == null) return false;
       return act.year == now.year &&
@@ -256,7 +256,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   double get _totalSales {
     return _vouchers
-        .where((v) => v.isUsed)
+        .where((v) => v.isUsed || v.isExpired)
         .fold(0.0, (sum, v) => sum + v.price);
   }
 
@@ -871,16 +871,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                     final newPort = portController.text.trim();
                     if (newPort.isEmpty) return;
                     setDialogState(() => isSaving = true);
+                    final nav = Navigator.of(ctx);
                     try {
                       await widget.service.setWebFigPort(newPort);
                       onPortChanged(newPort);
                       if (!mounted) return;
-                      Navigator.pop(ctx);
-                      TopToast.show(context, 'Port updated!', backgroundColor: const Color(0xFF34A853));
+                      nav.pop();
+                      TopToast.show(context, 'Port updated!', backgroundColor: const Color(0xFF34A853)); // ignore: use_build_context_synchronously
                     } catch (e) {
                       if (!mounted) return;
                       setDialogState(() => isSaving = false);
-                      TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
+                      TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252)); // ignore: use_build_context_synchronously
                     }
                   },
                   child: Text('Save', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
@@ -1174,6 +1175,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ),
                             child: const Icon(Icons.router_rounded, color: Colors.white, size: 36),
                           ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Voucher App',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
                           const SizedBox(height: 24),
                           
                           // User Profile Chip
@@ -1464,7 +1475,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         Text('MikroTik Status', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 24),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
               child: Column(
@@ -1497,20 +1508,56 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ),
             // CPU & RAM stats
-            SizedBox(
-              width: 150,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _buildResourceBar(Icons.developer_board_rounded, 'CPU Load', '$cpuLoad%', double.tryParse(cpuLoad) ?? 0, const Color(0xFF00BFFF)),
-                  const SizedBox(height: 16),
-                  _buildResourceBar(Icons.memory_rounded, 'RAM Usage', '$ramLoad%', double.tryParse(ramLoad) ?? 0, const Color(0xFF7B2FBE)),
-                ],
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildStatSquare(Icons.memory_rounded, '$cpuLoad%', 'CPU Load', const Color(0xFF00BFFF)),
+                const SizedBox(width: 12),
+                _buildStatSquare(Icons.dns_rounded, '$ramLoad%', 'RAM Used', const Color(0xFF00E676)),
+              ],
             ),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildStatSquare(IconData icon, String value, String label, Color color) {
+    return Container(
+      width: 100,
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161626).withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              height: 1.0,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              color: Colors.white54,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1843,6 +1890,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _buildMobileLayout(BuildContext context) {
     final currentUser = AuthService.instance.currentUser;
+    // ignore: unused_local_variable
     final isAdmin = AuthService.isCurrentUserAdmin(currentUser?.email);
     return Scaffold(
       backgroundColor: const Color(0xFF050510),

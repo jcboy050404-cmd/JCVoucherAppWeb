@@ -45,15 +45,62 @@ class Voucher {
   }
 
   bool get isUsed {
+    // Expired vouchers are never considered "used" — they go to the Expired tab.
+    if (isExpired) return false;
     final bin = double.tryParse(bytesIn) ?? 0;
     final bout = double.tryParse(bytesOut) ?? 0;
     if (bin > 0 || bout > 0) return true;
     if (uptime.isNotEmpty && uptime != '0s' && uptime != '0') return true;
     final lower = comment.toLowerCase();
-    if (lower.contains('exp:') || lower.contains('log:') || lower.contains('used') || (disabled && lower.contains('expired'))) {
+    if (lower.contains('exp:') || lower.contains('log:') || lower.contains('used')) {
       return true;
     }
     return false;
+  }
+
+  bool get isExpired {
+    // 1. Router already stamped the voucher as expired (via our disable script)
+    final lower = comment.toLowerCase();
+    if (disabled && (lower.contains('exp:') || lower.contains('expired'))) {
+      return true;
+    }
+
+    // 2. Uptime limit fully consumed
+    if (limitUptime.isNotEmpty && uptime.isNotEmpty && uptime != '0s' && uptime != '0') {
+      final limitSec = _parseUptimeSeconds(limitUptime);
+      final usedSec = _parseUptimeSeconds(uptime);
+      if (limitSec > 0 && usedSec >= limitSec) return true;
+    }
+
+    // 3. Data limit fully consumed
+    if (limitBytes.isNotEmpty) {
+      final limit = double.tryParse(limitBytes) ?? 0;
+      final bin = double.tryParse(bytesIn) ?? 0;
+      final bout = double.tryParse(bytesOut) ?? 0;
+      if (limit > 0 && (bin + bout) >= limit) return true;
+    }
+
+    return false;
+  }
+
+  /// Parses MikroTik uptime/limit-uptime strings (e.g. "1d2h30m15s", "3600", "2h") into seconds.
+  static int _parseUptimeSeconds(String s) {
+    s = s.trim();
+    // Plain seconds (MikroTik sometimes returns a raw number)
+    final plain = int.tryParse(s);
+    if (plain != null) return plain;
+    int total = 0;
+    // Match optional weeks, days, hours, minutes, seconds
+    final re = RegExp(r'(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?');
+    final m = re.firstMatch(s);
+    if (m != null) {
+      total += (int.tryParse(m.group(1) ?? '') ?? 0) * 7 * 86400;
+      total += (int.tryParse(m.group(2) ?? '') ?? 0) * 86400;
+      total += (int.tryParse(m.group(3) ?? '') ?? 0) * 3600;
+      total += (int.tryParse(m.group(4) ?? '') ?? 0) * 60;
+      total += (int.tryParse(m.group(5) ?? '') ?? 0);
+    }
+    return total;
   }
 
   String get displayCode => name.toUpperCase();
@@ -147,10 +194,10 @@ class Voucher {
   }
 
   DateTime? get activationDate {
-    // 1. MikroTik exp: or log: tag (appended by script upon first login)
-    final expMatch = RegExp(r'(?:exp:|log:)([a-zA-Z]{3}/\d{1,2}/\d{4}|\d{4}-\d{1,2}-\d{1,2})').firstMatch(comment);
-    if (expMatch != null) {
-      final dateStr = expMatch.group(1)!;
+    // 1. MikroTik log: tag (appended by script upon first login)
+    final logMatch = RegExp(r'log:([a-zA-Z]{3}/\d{1,2}/\d{4}|\d{4}-\d{1,2}-\d{1,2})').firstMatch(comment);
+    if (logMatch != null) {
+      final dateStr = logMatch.group(1)!;
       if (dateStr.contains('/')) {
         final parts = dateStr.split('/');
         final monthStr = parts[0].toLowerCase();

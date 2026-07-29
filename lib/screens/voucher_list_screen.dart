@@ -6,7 +6,6 @@ import 'package:share_plus/share_plus.dart';
 import '../main.dart';
 import '../services/mikrotik_service.dart';
 import '../models/voucher.dart';
-import '../responsive.dart';
 import '../widgets/voucher_card.dart';
 import '../widgets/print_preview_helper.dart';
 
@@ -113,8 +112,8 @@ class _VoucherListScreenState extends State<VoucherListScreen>
   }
 
   int get _availableCount => _all.where((v) => !v.isUsed && !v.disabled).length;
-  int get _usedCount => _all.where((v) => v.isUsed).length;
-  int get _expiredCount => _all.where((v) => v.disabled && !v.isUsed).length;
+  int get _usedCount => _all.where((v) => v.isUsed && !v.isExpired).length;
+  int get _expiredCount => _all.where((v) => v.isExpired || (v.disabled && !v.isUsed)).length;
 
   @override
   void initState() {
@@ -247,8 +246,8 @@ class _VoucherListScreenState extends State<VoucherListScreen>
 
       final matchStatus = switch (_filterStatus) {
         'available' => !v.isUsed && !v.disabled,
-        'used' => v.isUsed,
-        'expired' => v.disabled && !v.isUsed,
+        'used' => v.isUsed && !v.isExpired,
+        'expired' => v.isExpired || (v.disabled && !v.isUsed),
         _ => true,
       };
 
@@ -320,6 +319,80 @@ class _VoucherListScreenState extends State<VoucherListScreen>
         _multiSelect = false;
       });
       _applyFilter();
+    } catch (e) {
+      if (!mounted) return;
+      _showError(e.toString());
+    }
+  }
+
+  Future<void> _bulkDeleteExpired() async {
+    final expiredVouchers = _all.where((v) => v.isExpired || (v.disabled && !v.isUsed)).toList();
+    if (expiredVouchers.isEmpty) {
+      TopToast.show(context, 'No expired vouchers to delete', backgroundColor: const Color(0xFF555555));
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161626),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF5252).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.delete_sweep_rounded, color: Color(0xFFFF5252), size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Clear All Expired?',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'This will permanently delete ${expiredVouchers.length} expired voucher${expiredVouchers.length != 1 ? 's' : ''} from your router. This cannot be undone.',
+          style: GoogleFonts.poppins(color: Colors.white54, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.white54)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+            label: Text('Delete ${expiredVouchers.length}', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF5252),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirm) return;
+
+    try {
+      final ids = expiredVouchers.map((v) => v.id).toList();
+      for (final v in expiredVouchers) {
+        await widget.service.removeActiveSessionByUsername(v.name);
+        VoucherListScreen.newlyGeneratedNames.remove(v.name);
+        VoucherListScreen.newlyGeneratedVouchers.removeWhere((x) => x.id == v.id);
+      }
+      await widget.service.removeVouchers(ids);
+      if (!mounted) return;
+      setState(() => _all.removeWhere((v) => ids.contains(v.id)));
+      _applyFilter();
+      TopToast.show(context, '${expiredVouchers.length} expired voucher${expiredVouchers.length != 1 ? 's' : ''} deleted', backgroundColor: const Color(0xFFFF5252));
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString());
@@ -454,6 +527,13 @@ class _VoucherListScreenState extends State<VoucherListScreen>
               ],
             ),
           ),
+          // Clear Expired button – only on Expired tab
+          if (!_loading && _filterStatus == 'expired' && _expiredCount > 0)
+            IconButton(
+              onPressed: _bulkDeleteExpired,
+              icon: const Icon(Icons.delete_sweep_rounded, color: Color(0xFFFF5252)),
+              tooltip: 'Delete All Expired',
+            ),
           // Print button
           if (!_loading && _all.isNotEmpty)
             IconButton(

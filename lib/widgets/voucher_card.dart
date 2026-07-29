@@ -24,17 +24,21 @@ class VoucherCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = voucher.isUsed
-        ? const Color(0xFFFF9800)
-        : voucher.disabled
-            ? const Color(0xFFFF5252)
-            : const Color(0xFF00E676);
+    final statusColor = voucher.isExpired
+        ? const Color(0xFFFF5252)
+        : voucher.isUsed
+            ? const Color(0xFFFF9800)
+            : voucher.disabled
+                ? const Color(0xFF9E9E9E)
+                : const Color(0xFF00E676);
 
-    final statusLabel = voucher.isUsed
-        ? 'Used'
-        : voucher.disabled
-            ? 'Disabled'
-            : 'Available';
+    final statusLabel = voucher.isExpired
+        ? 'Expired'
+        : voucher.isUsed
+            ? 'Used'
+            : voucher.disabled
+                ? 'Disabled'
+                : 'Available';
 
     final priceStr = voucher.price > 0 ? '₱${voucher.price.toStringAsFixed(0)}' : 'Free';
 

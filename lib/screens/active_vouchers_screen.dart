@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../services/mikrotik_service.dart';
 import '../models/voucher.dart';
-import '../responsive.dart';
 
 class ActiveVouchersScreen extends StatefulWidget {
   final MikrotikService service;
