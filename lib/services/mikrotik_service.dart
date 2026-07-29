@@ -581,6 +581,7 @@ class MikrotikService {
     required String profile,
     String? comment,
     String? limitUptime,
+    String? limitBytes,
   }) async {
     return _execute(() async {
       final words = [
@@ -592,6 +593,9 @@ class MikrotikService {
       if (comment != null && comment.isNotEmpty) words.add('=comment=$comment');
       if (limitUptime != null && limitUptime.isNotEmpty) {
         words.add('=limit-uptime=$limitUptime');
+      }
+      if (limitBytes != null && limitBytes.isNotEmpty && limitBytes != '0') {
+        words.add('=limit-bytes-total=$limitBytes');
       }
 
       _send(words);
@@ -618,6 +622,7 @@ class MikrotikService {
         profile: profile,
         comment: comment ?? '',
         limitUptime: limitUptime ?? '',
+        limitBytes: limitBytes ?? '',
       );
     });
   }

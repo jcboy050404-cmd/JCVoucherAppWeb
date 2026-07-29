@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io' show Platform;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -323,30 +324,28 @@ class _DashboardScreenState extends State<DashboardScreen>
     String selBatch = 'all';
     bool availableOnly = true;
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final targetVouchers = _getVouchersForPrint(
-              batch: selBatch,
-              availableOnly: availableOnly,
-            );
+    Widget buildContent(BuildContext ctx, StateSetter setModalState) {
+      final targetVouchers = _getVouchersForPrint(
+        batch: selBatch,
+        availableOnly: availableOnly,
+      );
 
-            return Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF161626),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(28)),
-                border: Border.all(
-                  color: const Color(0xFF00BFFF).withValues(alpha: 0.3),
-                  width: 1.5,
-                ),
-              ),
-              child: SingleChildScrollView(
+      final bool isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+
+      return Container(
+        width: isDesktop ? 500 : double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF161626),
+          borderRadius: isDesktop
+              ? BorderRadius.circular(28)
+              : const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(
+            color: const Color(0xFF00BFFF).withValues(alpha: 0.3),
+            width: 1.5,
+          ),
+        ),
+        child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -554,10 +553,26 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
               ),
             );
-          },
-        );
-      },
-    );
+    }
+
+    final bool isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(24),
+          child: StatefulBuilder(builder: (builderCtx, setModalState) => buildContent(ctx, setModalState)),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (ctx) => StatefulBuilder(builder: (builderCtx, setModalState) => buildContent(ctx, setModalState)),
+      );
+    }
   }
 
   void _showPrintPreviewModal(List<Voucher> vouchers) {
