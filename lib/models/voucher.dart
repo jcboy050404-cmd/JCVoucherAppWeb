@@ -8,6 +8,7 @@ class Voucher {
   final String limitBytes;
   final String bytesIn;
   final String bytesOut;
+  final String uptime;
   final bool disabled;
   final String createdAt;
 
@@ -21,6 +22,7 @@ class Voucher {
     this.limitBytes = '',
     this.bytesIn = '0',
     this.bytesOut = '0',
+    this.uptime = '0s',
     this.disabled = false,
     this.createdAt = '',
   });
@@ -36,6 +38,7 @@ class Voucher {
       limitBytes: map['limit-bytes-total'] ?? map['limit-bytes-out'] ?? '',
       bytesIn: map['bytes-in'] ?? '0',
       bytesOut: map['bytes-out'] ?? '0',
+      uptime: map['uptime'] ?? '0s',
       disabled: map['disabled'] == 'true',
       createdAt: map['last-logged-out'] ?? '',
     );
@@ -45,8 +48,9 @@ class Voucher {
     final bin = double.tryParse(bytesIn) ?? 0;
     final bout = double.tryParse(bytesOut) ?? 0;
     if (bin > 0 || bout > 0) return true;
+    if (uptime.isNotEmpty && uptime != '0s' && uptime != '0') return true;
     final lower = comment.toLowerCase();
-    if (lower.contains('exp:') || lower.contains('used') || (disabled && lower.contains('expired'))) {
+    if (lower.contains('exp:') || lower.contains('log:') || lower.contains('used') || (disabled && lower.contains('expired'))) {
       return true;
     }
     return false;
@@ -143,8 +147,8 @@ class Voucher {
   }
 
   DateTime? get activationDate {
-    // 1. MikroTik exp: tag (appended by script upon first login)
-    final expMatch = RegExp(r'exp:([a-zA-Z]{3}/\d{1,2}/\d{4}|\d{4}-\d{1,2}-\d{1,2})').firstMatch(comment);
+    // 1. MikroTik exp: or log: tag (appended by script upon first login)
+    final expMatch = RegExp(r'(?:exp:|log:)([a-zA-Z]{3}/\d{1,2}/\d{4}|\d{4}-\d{1,2}-\d{1,2})').firstMatch(comment);
     if (expMatch != null) {
       final dateStr = expMatch.group(1)!;
       if (dateStr.contains('/')) {

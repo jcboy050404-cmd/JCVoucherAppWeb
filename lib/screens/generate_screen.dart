@@ -620,9 +620,9 @@ class _GenerateScreenState extends State<GenerateScreen> {
       effectiveComment = effectiveComment.isEmpty ? nameStr : '$effectiveComment $nameStr';
     }
 
-    if (customComment.isEmpty) {
-      final now = DateTime.now();
-      final dateStr = 'Date:${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final now = DateTime.now();
+    final dateStr = 'Date:${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    if (!effectiveComment.contains('Date:')) {
       effectiveComment = effectiveComment.isEmpty ? dateStr : '$effectiveComment $dateStr';
     }
 

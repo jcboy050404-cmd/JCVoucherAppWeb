@@ -1798,6 +1798,49 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  Widget _quickActionsGrid(List<Widget> children) {
+    final cols = Responsive(context).gridColumns(itemWidth: 300).clamp(2, 3);
+    return GridView.count(
+      crossAxisCount: cols,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: cols > 2 ? 1.4 : 1.18,
+      children: children,
+    );
+  }
+
+  Widget _buildActionItem({
+    required IconData icon,
+    required String label,
+    required List<Color> gradient,
+    required VoidCallback onTap,
+  }) {
+    if (_trialLocked) {
+      return _LockedActionCard(
+        icon: icon,
+        label: label,
+        gradient: const [
+          Color(0xFF444466),
+          Color(0xFF333355),
+        ],
+        onTap: () async {
+          final upgraded = await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => UpgradeScreen(service: widget.service)),
+          );
+          if (upgraded == true) _loadData();
+        },
+      );
+    }
+    return _QuickActionCard(
+      icon: icon,
+      label: label,
+      gradient: gradient,
+      onTap: onTap,
+    );
+  }
+
   Widget _buildMobileLayout(BuildContext context) {
     final currentUser = AuthService.instance.currentUser;
     final isAdmin = AuthService.isCurrentUserAdmin(currentUser?.email);
@@ -2322,6 +2365,136 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ),
                         ]),
                       ),
+                      // ── Quick Actions Background Section ───────────────────
+                      _SectionCard(
+                        title: 'Quick Actions',
+                        icon: Icons.bolt_rounded,
+                        accentColor: const Color(0xFFFF9800),
+                        child: _quickActionsGrid([
+                          _buildActionItem(
+                            icon: Icons.add_circle_rounded,
+                            label: 'Generate\nVouchers',
+                            gradient: const [Color(0xFF00BFFF), Color(0xFF0066CC)],
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => GenerateScreen(service: widget.service)),
+                              );
+                              _loadData();
+                            },
+                          ),
+                          _buildActionItem(
+                            icon: Icons.list_alt_rounded,
+                            label: 'Voucher\nList',
+                            gradient: const [Color(0xFF7B2FBE), Color(0xFF4A1580)],
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => VoucherListScreen(service: widget.service)),
+                              );
+                              _loadData();
+                            },
+                          ),
+                          _buildActionItem(
+                            icon: Icons.style_rounded,
+                            label: 'User\nProfiles',
+                            gradient: const [Color(0xFFFF9800), Color(0xFFE65100)],
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => ProfileListScreen(service: widget.service)),
+                              );
+                              _loadData();
+                            },
+                          ),
+                          _buildActionItem(
+                            icon: Icons.code_rounded,
+                            label: 'Router\nScripts',
+                            gradient: const [Color(0xFF7B2FBE), Color(0xFF512DA8)],
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => ScriptListScreen(service: widget.service)),
+                              );
+                              _loadData();
+                            },
+                          ),
+                          Builder(
+                            builder: (context) {
+                              final currentUser = AuthService.instance.currentUser;
+                              final isAdmin = AuthService.isCurrentUserAdmin(currentUser?.email);
+                              if (isAdmin || _fileManagerUnlocked) {
+                                return _buildActionItem(
+                                  icon: Icons.folder_open_rounded,
+                                  label: 'File\nManager',
+                                  gradient: const [Color(0xFFE91E63), Color(0xFFC2185B)],
+                                  onTap: () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => MikrotikFileExplorerScreen(service: widget.service)),
+                                    );
+                                  },
+                                );
+                              } else {
+                                return _buildActionItem(
+                                  icon: Icons.lock_outline_rounded,
+                                  label: 'File\nLocked',
+                                  gradient: const [Color(0xFF757575), Color(0xFF424242)],
+                                  onTap: () {
+                                    TopToast.show(context, 'File Manager is currently locked by the Admin', backgroundColor: const Color(0xFFF57C00));
+                                  },
+                                );
+                              }
+                            }
+                          ),
+                          _buildActionItem(
+                            icon: Icons.wifi_tethering_rounded,
+                            label: 'Active\nVouchers',
+                            gradient: const [Color(0xFF00E676), Color(0xFF00B0FF)],
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => ActiveVouchersScreen(service: widget.service)),
+                              );
+                              _loadData();
+                            },
+                          ),
+                          _buildActionItem(
+                            icon: Icons.print_rounded,
+                            label: 'Print\nVouchers',
+                            gradient: const [Color(0xFF00BFE0), Color(0xFF0099CC)],
+                            onTap: _showPrintOptionsModal,
+                          ),
+                          _buildActionItem(
+                            icon: Icons.alt_route_rounded,
+                            label: 'PPPoE\nClients',
+                            gradient: const [Color(0xFFBB86FC), Color(0xFF6200EE)],
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => PppoeScreen(service: widget.service)),
+                              );
+                              _loadData();
+                            },
+                          ),
+                          Builder(
+                            builder: (context) {
+                              final currentUser = AuthService.instance.currentUser;
+                              final isAdmin = AuthService.isCurrentUserAdmin(currentUser?.email);
+                              if (isAdmin) {
+                                return _buildActionItem(
+                                  icon: Icons.router_rounded,
+                                  label: 'Remote\nConfig',
+                                  gradient: const [Color(0xFFFF5252), Color(0xFFD32F2F)],
+                                  onTap: _showRemoteConfigGuide,
+                                );
+                              } else {
+                                return _buildActionItem(
+                                  icon: Icons.lock_outline_rounded,
+                                  label: 'Config\nLocked',
+                                  gradient: const [Color(0xFF757575), Color(0xFF424242)],
+                                  onTap: () {
+                                    TopToast.show(context, 'Remote Config is currently locked by the Admin', backgroundColor: const Color(0xFFF57C00));
+                                  },
+                                );
+                              }
+                            }
+                          ),
+                        ]),
+                      ),
                           const SizedBox(height: 40),
                         ],
                       ),
@@ -2436,6 +2609,171 @@ class _SectionCard extends StatelessWidget {
           const SizedBox(height: 16),
           child,
         ],
+      ),
+    );
+  }
+}
+
+class _QuickActionCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final List<Color> gradient;
+  final VoidCallback onTap;
+
+  const _QuickActionCard({
+    required this.icon,
+    required this.label,
+    required this.gradient,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: gradient.first.withValues(alpha: 0.3),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: Colors.white, size: 22),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  height: 1.15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A locked action card shown in trial mode — styled with a gradient border
+/// and a glowing lock badge to draw attention and prompt upgrade.
+class _LockedActionCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final List<Color> gradient;
+  final VoidCallback onTap;
+
+  const _LockedActionCard({
+    required this.icon,
+    required this.label,
+    required this.gradient,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(1.5),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A0E2E),
+            borderRadius: BorderRadius.circular(17),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Opacity(
+                      opacity: 0.5,
+                      child: Icon(icon, color: Colors.white, size: 24),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF9800).withValues(alpha: 0.18),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFFFF9800).withValues(alpha: 0.5),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.lock_rounded,
+                        size: 10,
+                        color: Color(0xFFFF9800),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Opacity(
+                  opacity: 0.5,
+                  child: Text(
+                    label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      height: 1.15,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Tap to upgrade',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFFFF9800),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

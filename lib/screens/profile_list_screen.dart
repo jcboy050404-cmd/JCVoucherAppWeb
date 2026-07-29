@@ -335,6 +335,13 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
     /system scheduler add name=\$schedName interval=\$interval start-date=[/system clock get date] start-time=[/system clock get time] on-event=\$onEvent;
     :local newComment ([:pick \$uComment 0 \$valPos] . "exp:" . [/system clock get date] . "/" . [/system clock get time] . [:pick \$uComment \$valEnd [:len \$uComment]]);
     /ip hotspot user set [find name=\$user] comment=\$newComment;
+} else={
+    :local logPos [:find \$uComment "log:"];
+    :local expPos [:find \$uComment "exp:"];
+    :if ([:typeof \$expPos] != "num" && [:typeof \$logPos] != "num") do={
+        :local newComment (\$uComment . " log:" . [/system clock get date] . "/" . [/system clock get time]);
+        /ip hotspot user set [find name=\$user] comment=\$newComment;
+    }
 }
 # --- End Auto-Generated Validity Script ---''';
 
