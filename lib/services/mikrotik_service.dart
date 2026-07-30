@@ -145,6 +145,15 @@ class MikrotikService {
     return [..._encodeLength(bytes.length), ...bytes];
   }
 
+  /// Like [_encodeWord] but accepts raw bytes for the value — used when the
+  /// word payload is binary (e.g. image file contents).  The key part
+  /// (e.g. `=contents=`) is still UTF-8; only the value bytes are raw.
+  List<int> _encodeRawWord(String keyPrefix, List<int> rawValueBytes) {
+    final keyBytes = utf8.encode(keyPrefix);
+    final totalBytes = [...keyBytes, ...rawValueBytes];
+    return [..._encodeLength(totalBytes.length), ...totalBytes];
+  }
+
   List<int> _encodeSentence(List<String> words) {
     final result = <int>[];
     for (final word in words) {
@@ -152,6 +161,27 @@ class MikrotikService {
     }
     result.add(0); // end-of-sentence
     return result;
+  }
+
+  /// Sends a sentence where the LAST word has binary content.
+  /// [textWords] are sent as normal UTF-8 words.
+  /// [binaryKey] is the API key prefix (e.g. `=contents=`).
+  /// [binaryValue] are the raw bytes of the binary value.
+  void _sendWithBinaryContents(
+    List<String> textWords,
+    String binaryKey,
+    List<int> binaryValue,
+  ) {
+    if (_socket == null || !_connected) {
+      throw Exception('Socket is not connected');
+    }
+    final result = <int>[];
+    for (final word in textWords) {
+      result.addAll(_encodeWord(word));
+    }
+    result.addAll(_encodeRawWord(binaryKey, binaryValue));
+    result.add(0); // end-of-sentence
+    _socket!.add(result);
   }
 
   // ─── Low-level sentence decoding ───────────────────────────────────────────
@@ -1548,20 +1578,36 @@ class MikrotikService {
 
   /// Writes an encrypted PRO unlock flag for [email] on the connected MikroTik router.
   /// The script name is an HMAC-SHA256 hash — no plain email in Winbox.
+  /// Idempotent: skips the write if the script already exists for this Gmail account.
   Future<void> setRouterProFlag(String email) async {
     return _execute(() async {
       try {
         final hash = _emailHash(email);
-        // comment is also hashed — no email visible in RouterOS
-        _send([
-          '/system/script/add',
-          '=name=va_pro_$hash',
-          '=source=# VoucherApp PRO Flag',
-          '=comment=va_pro_$hash',
-        ]);
-        await _readResponse();
+        final name = 'va_pro_$hash';
+
+        // Check if script already exists for this Gmail (hashed) before adding.
+        // This prevents duplicate-script errors on every login.
+        _send(['/system/script/print', '?name=$name']);
+        final response = await _readResponse();
+        final alreadyExists = response.any(
+          (s) => s.isNotEmpty && s[0] == '!re',
+        );
+
+        if (!alreadyExists) {
+          // Not on router yet — write it now (first PRO login on this router).
+          _send([
+            '/system/script/add',
+            '=name=$name',
+            '=source=# VoucherApp PRO Flag',
+            '=comment=$name',
+          ]);
+          await _readResponse();
+          debugPrint('MikrotikService: PRO flag written for $name');
+        } else {
+          debugPrint('MikrotikService: PRO flag already exists for $name, skipping write.');
+        }
       } catch (e) {
-        debugPrint('MikrotikService: $e');
+        debugPrint('MikrotikService: setRouterProFlag error: $e');
       }
     });
   }
@@ -1710,10 +1756,53 @@ class MikrotikService {
   }
   // ─── File Management (RouterOS) ───────────────────────────────────────────
 
+  /// Deletes ALL files and sub-directories whose name starts with [dirPrefix].
+  /// Files are deleted first; directories are deleted deepest-path-first
+  /// so parent folders are empty by the time we remove them.
+  /// Returns the total number of entries removed.
+  Future<int> deleteFilesInDirectory(String dirPrefix) async {
+    return _execute(() async {
+      _send(['/file/print']);
+      final response = await _readResponse();
+
+      final fileIds = <String>[];
+      final dirEntries = <MapEntry<String, String>>[];  // name → id
+
+      for (final sentence in response) {
+        if (sentence.isEmpty || sentence[0] != '!re') continue;
+        final data = _parseWords(sentence);
+        final name = data['name'] ?? '';
+        final id   = data['.id'];
+        if (id == null || !name.startsWith(dirPrefix)) continue;
+
+        if (data['type']?.toLowerCase() == 'directory') {
+          dirEntries.add(MapEntry(name, id));
+        } else {
+          fileIds.add(id);
+        }
+      }
+
+      // 1. Delete regular files first
+      for (final id in fileIds) {
+        _send(['/file/remove', '=.id=$id']);
+        await _readResponse();
+      }
+
+      // 2. Delete directories deepest-first (longest path = deepest)
+      dirEntries.sort((a, b) => b.key.compareTo(a.key));
+      for (final entry in dirEntries) {
+        _send(['/file/remove', '=.id=${entry.value}']);
+        await _readResponse();
+      }
+
+      return fileIds.length + dirEntries.length;
+    });
+  }
+
   Future<List<RouterFile>> getFiles({String? directory}) async {
     return _execute(() async {
-      final cmd = ['/file/print'];
-      _send(cmd);
+      // Use 'detail' to get all properties including 'contents' (for small text files)
+      _send(['/file/print', 'detail']);
       final response = await _readResponse();
       final trap = _getTrapData(response);
       if (trap != null) {
@@ -1725,7 +1814,6 @@ class MikrotikService {
         if (sentence.isNotEmpty && sentence[0] == '!re') {
           final data = _parseWords(sentence);
           final rf = RouterFile.fromMap(data);
-          // Simple client-side filtering if directory is specified
           if (directory != null && directory.isNotEmpty) {
             if (rf.name.startsWith(directory) && rf.name != directory) {
               files.add(rf);
@@ -1741,17 +1829,22 @@ class MikrotikService {
 
   Future<String> getFileContents(String id) async {
     return _execute(() async {
-      _send(['/file/get', '=.id=$id', '=value-name=contents']);
+      // /file/print ?(.id=<id>) detail  — fetches a single file with all fields.
+      // The 'contents' field is populated for text files on RouterOS.
+      _send(['/file/print', 'detail', '?.id=$id']);
       final response = await _readResponse();
       final trap = _getTrapData(response);
       if (trap != null) {
-        throw Exception(trap['message'] ?? 'Failed to get file contents');
+        throw Exception(trap['message'] ?? 'Failed to read file — this file may be binary or too large.');
       }
-      
-      final reTag = response.firstWhere((s) => s.isNotEmpty && s[0] == '!re', orElse: () => <String>[]);
+
+      final reTag = response.firstWhere(
+        (s) => s.isNotEmpty && s[0] == '!re',
+        orElse: () => <String>[],
+      );
       if (reTag.isNotEmpty) {
         final data = _parseWords(reTag);
-        return data['ret'] ?? '';
+        return data['contents'] ?? '';
       }
       return '';
     });
@@ -1778,5 +1871,91 @@ class MikrotikService {
       }
     });
   }
-}
 
+  /// Creates a new file on the router with the given [path] and [content].
+  /// RouterOS doesn't support create-with-content in one step, so we:
+  ///   1. /file/add  — creates an empty file entry
+  ///   2. /file/set  — writes the content into it
+  Future<void> createFile(String path, String content) async {
+    return _execute(() async {
+      // Step 1: Create the file (empty)
+      _send(['/file/add', '=name=$path', '=contents=']);
+      final addResponse = await _readResponse();
+      final addTrap = _getTrapData(addResponse);
+      if (addTrap != null) {
+        throw Exception(addTrap['message'] ?? 'Failed to create file: $path');
+      }
+
+      // Step 2: Find the new file's .id to write contents
+      _send(['/file/print', '?name=$path']);
+      final printResponse = await _readResponse();
+      String? fileId;
+      for (final sentence in printResponse) {
+        if (sentence.isNotEmpty && sentence[0] == '!re') {
+          final data = _parseWords(sentence);
+          fileId = data['.id'];
+          break;
+        }
+      }
+
+      if (fileId == null) {
+        throw Exception('File created but ID not found — cannot write contents.');
+      }
+
+      // Step 3: Write the content
+      _send(['/file/set', '=.id=$fileId', '=contents=$content']);
+      final setResponse = await _readResponse();
+      final setTrap = _getTrapData(setResponse);
+      if (setTrap != null) {
+        throw Exception(setTrap['message'] ?? 'Failed to write file contents');
+      }
+    });
+  }
+
+  /// Writes raw binary bytes into an existing file (PNG, JPG, ICO, etc.)
+  /// Uses [_sendWithBinaryContents] to bypass UTF-8 encoding.
+  Future<void> setFileBinaryContents(String id, List<int> bytes) async {
+    return _execute(() async {
+      _sendWithBinaryContents(['/file/set', '=.id=$id'], '=contents=', bytes);
+      final response = await _readResponse();
+      final trap = _getTrapData(response);
+      if (trap != null) {
+        throw Exception(trap['message'] ?? 'Failed to write binary file');
+      }
+    });
+  }
+
+  /// Creates a new binary file (image, font, etc.) at [path] on the router.
+  /// Same two-step pattern as [createFile] but uses binary-safe byte writing.
+  Future<void> createBinaryFile(String path, List<int> bytes) async {
+    return _execute(() async {
+      // Step 1: Create empty file entry
+      _send(['/file/add', '=name=$path', '=contents=']);
+      final addResp = await _readResponse();
+      final addTrap = _getTrapData(addResp);
+      if (addTrap != null) {
+        throw Exception(addTrap['message'] ?? 'Failed to create binary file: $path');
+      }
+
+      // Step 2: Get the new file's .id
+      _send(['/file/print', '?name=$path']);
+      final printResp = await _readResponse();
+      String? fileId;
+      for (final s in printResp) {
+        if (s.isNotEmpty && s[0] == '!re') {
+          fileId = _parseWords(s)['.id'];
+          break;
+        }
+      }
+      if (fileId == null) throw Exception('Binary file created but .id not found.');
+
+      // Step 3: Write raw bytes (binary-safe, no UTF-8 corruption)
+      _sendWithBinaryContents(['/file/set', '=.id=$fileId'], '=contents=', bytes);
+      final setResp = await _readResponse();
+      final setTrap = _getTrapData(setResp);
+      if (setTrap != null) {
+        throw Exception(setTrap['message'] ?? 'Failed to write binary file contents');
+      }
+    });
+  }
+}

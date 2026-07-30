@@ -293,6 +293,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
 
       if (!mounted) return;
       setState(() => _all.removeWhere((x) => x.id == v.id));
+      _rebuildCaches();
       _applyFilter();
       TopToast.show(context, 'Voucher deleted', backgroundColor: const Color(0xFFFF5252));
     } catch (e) {
@@ -319,6 +320,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
         _selectedIds.clear();
         _multiSelect = false;
       });
+      _rebuildCaches();
       _applyFilter();
     } catch (e) {
       if (!mounted) return;
@@ -392,6 +394,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
       await widget.service.removeVouchers(ids);
       if (!mounted) return;
       setState(() => _all.removeWhere((v) => ids.contains(v.id)));
+      _rebuildCaches();
       _applyFilter();
       TopToast.show(context, '${expiredVouchers.length} expired voucher${expiredVouchers.length != 1 ? 's' : ''} deleted', backgroundColor: const Color(0xFFFF5252));
     } catch (e) {

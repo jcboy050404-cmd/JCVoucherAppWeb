@@ -258,6 +258,7 @@ class _AdminScreenState extends State<AdminScreen> {
     if (success) {
       await _changeUserAccountType(email, plan.toLowerCase());
       _loadAllRequests();
+      _loadAllUsers();
     }
   }
 
@@ -266,7 +267,7 @@ class _AdminScreenState extends State<AdminScreen> {
     if (success && mounted) {
       TopToast.show(context, 'Rejected request $refNumber', backgroundColor: const Color(0xFFFF5252));
       _loadAllRequests();
-    _loadAllUsers();
+      _loadAllUsers();
     }
   }
 
@@ -334,10 +335,22 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  /// Shows a dialog listing all registered MikroTik routers for [email].
+  /// Admin can remove individual router slots to free up space.
+  Future<void> _showManageDevicesDialog(String email) async {
+    if (email.isEmpty || email == 'No Email') return;
+
+    // Fetch current registrations
+    showDialog(
+      context: context,
+      builder: (ctx) => _ManageDevicesDialog(email: email),
+    );
+  }
+
   Future<void> _changeUserAccountType(String email, String type) async {
     if (email.isEmpty || email == 'No Email') return;
-    
-    setState(() => _isLoadingUsers = true);
+
+    if (mounted) setState(() => _isLoadingUsers = true);
     try {
       if (type == 'trial') {
         await CloudSyncService.saveUserState(email, pro: false, proExpiresAt: '');
@@ -362,6 +375,7 @@ class _AdminScreenState extends State<AdminScreen> {
         TopToast.show(context, '❌ Failed to update account: $e', backgroundColor: const Color(0xFFFF5252));
       }
     } finally {
+      if (mounted) setState(() => _isLoadingUsers = false);
       _loadAllUsers();
     }
   }
@@ -369,7 +383,7 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _grantManualPro() async {
     final email = _manualEmailCtrl.text.trim();
     if (email.isEmpty || !email.contains('@')) {
-      TopToast.show(context, '⚠️ Enter a valid email address', backgroundColor: Color(0xFFFF5252));
+      TopToast.show(context, '⚠️ Enter a valid email address', backgroundColor: const Color(0xFFFF5252));
       return;
     }
 
@@ -380,6 +394,7 @@ class _AdminScreenState extends State<AdminScreen> {
       if (!mounted) return;
       _manualEmailCtrl.clear();
       TopToast.show(context, '⚡ PRO License Granted to $email!', backgroundColor: const Color(0xFF34A853));
+      _loadAllUsers();
     } catch (e) {
       if (mounted) {
         TopToast.show(context, 'Error: ${e.toString()}', backgroundColor: const Color(0xFFFF5252));
@@ -770,7 +785,13 @@ class _AdminScreenState extends State<AdminScreen> {
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert_rounded, color: Colors.white70, size: 20),
                 color: const Color(0xFF1A1A2E),
-                onSelected: (val) => _changeUserAccountType(email, val),
+                onSelected: (val) {
+                  if (val == 'manage_devices') {
+                    _showManageDevicesDialog(email);
+                  } else {
+                    _changeUserAccountType(email, val);
+                  }
+                },
                 itemBuilder: (context) => [
                   PopupMenuItem(
                     value: 'trial',
@@ -788,6 +809,17 @@ class _AdminScreenState extends State<AdminScreen> {
                   PopupMenuItem(
                     value: 'lifetime',
                     child: Text('Set to PRO (Lifetime)', style: GoogleFonts.poppins(color: const Color(0xFF34A853), fontSize: 13, fontWeight: FontWeight.bold)),
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'manage_devices',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.devices_rounded, color: Color(0xFF00BFFF), size: 16),
+                        const SizedBox(width: 8),
+                        Text('Manage Devices 📱', style: GoogleFonts.poppins(color: const Color(0xFF00BFFF), fontSize: 13)),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -1514,10 +1546,10 @@ class _AdminScreenState extends State<AdminScreen> {
       if (image != null) {
         final bytes = await image.readAsBytes();
         final base64String = 'data:image/png;base64,${base64Encode(bytes)}';
+        if (!mounted) return;
         setState(() {
           _qrUrlCtrl.text = base64String;
         });
-        if (!mounted) return;
         TopToast.show(context, '📸 QR Image selected! Tap Save GCash Config below.', backgroundColor: const Color(0xFF34A853));
       }
     } catch (e) {
@@ -1781,6 +1813,9 @@ class _AdminScreenState extends State<AdminScreen> {
 
 
 
+  int get _rejectedCount =>
+      _allRequests.where((r) => r['status'] == 'rejected').length;
+
   Widget _buildFilterTabs() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -1789,6 +1824,8 @@ class _AdminScreenState extends State<AdminScreen> {
           _buildFilterChip('pending', 'Pending ($_pendingCount)'),
           const SizedBox(width: 8),
           _buildFilterChip('approved', 'Approved ($_approvedCount)'),
+          const SizedBox(width: 8),
+          _buildFilterChip('rejected', 'Rejected ($_rejectedCount)'),
           const SizedBox(width: 8),
           _buildFilterChip('all', 'All (${_allRequests.length})'),
         ],
@@ -2042,6 +2079,178 @@ class _AdminScreenState extends State<AdminScreen> {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ─── Manage Devices Dialog ──────────────────────────────────────────────────
+
+/// A self-contained dialog that loads and displays the registered MikroTik
+/// routers for [email], allowing the admin to remove individual device slots.
+class _ManageDevicesDialog extends StatefulWidget {
+  final String email;
+  const _ManageDevicesDialog({required this.email});
+
+  @override
+  State<_ManageDevicesDialog> createState() => _ManageDevicesDialogState();
+}
+
+class _ManageDevicesDialogState extends State<_ManageDevicesDialog> {
+  bool _loading = true;
+  Map<String, dynamic> _routers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRouters();
+  }
+
+  Future<void> _loadRouters() async {
+    final data = await CloudSyncService.getRegisteredRouters(widget.email);
+    if (mounted) setState(() { _routers = data; _loading = false; });
+  }
+
+  Future<void> _removeRouter(String routerIdHash) async {
+    setState(() => _loading = true);
+    await CloudSyncService.removeRouter(widget.email, routerIdHash);
+    await _loadRouters();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final used = _routers.length;
+    const max = CloudSyncService.kMaxRoutersPerAccount;
+
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1A1A2E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Row(
+        children: [
+          const Icon(Icons.devices_rounded, color: Color(0xFF00BFFF), size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Registered Devices',
+                    style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold)),
+                Text(widget.email,
+                    style: GoogleFonts.poppins(
+                        color: Colors.white54, fontSize: 10),
+                    overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 360,
+        child: _loading
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: CircularProgressIndicator(
+                      color: Color(0xFF00BFFF), strokeWidth: 2),
+                ),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Slot usage bar
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.router_rounded,
+                            color: Color(0xFF00BFFF), size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Device Slots Used: $used / $max',
+                          style: GoogleFonts.poppins(
+                              color: used >= max
+                                  ? const Color(0xFFFF5252)
+                                  : Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_routers.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Text('No routers registered yet.',
+                          style: GoogleFonts.poppins(
+                              color: Colors.white38, fontSize: 13)),
+                    )
+                  else
+                    ..._routers.entries.map((entry) {
+                      final hash = entry.key;
+                      final info = entry.value as Map<dynamic, dynamic>?;
+                      final label = info?['label'] as String? ?? 'MikroTik Router';
+                      final regAt = (info?['registered_at'] as String? ?? '').split('T').first;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF14142D),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.08)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.router_rounded,
+                                color: Color(0xFF34A853), size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(label,
+                                      style: GoogleFonts.poppins(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500),
+                                      overflow: TextOverflow.ellipsis),
+                                  Text('ID: ${hash.substring(0, 8)}... · Added: $regAt',
+                                      style: GoogleFonts.poppins(
+                                          color: Colors.white38, fontSize: 10)),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded,
+                                  color: Color(0xFFFF5252), size: 20),
+                              tooltip: 'Remove this device slot',
+                              onPressed: () => _removeRouter(hash),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Close',
+              style: GoogleFonts.poppins(color: Colors.white54)),
+        ),
+      ],
     );
   }
 }

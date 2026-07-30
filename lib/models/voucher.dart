@@ -35,7 +35,11 @@ class Voucher {
       profile: map['profile'] ?? 'default',
       comment: map['comment'] ?? '',
       limitUptime: map['limit-uptime'] ?? '',
-      limitBytes: map['limit-bytes-total'] ?? map['limit-bytes-out'] ?? '',
+      // limitBytes represents a TOTAL (up+down) quota. Only bind to
+      // limit-bytes-total here — binding limit-bytes-out (download-only) would
+      // make isExpired/formattedDataLeft mis-compare a download cap against
+      // the sum of upload+download bytes.
+      limitBytes: map['limit-bytes-total'] ?? '',
       bytesIn: map['bytes-in'] ?? '0',
       bytesOut: map['bytes-out'] ?? '0',
       uptime: map['uptime'] ?? '0s',
@@ -277,7 +281,11 @@ class HotspotActive {
       sessionTimeLeft: map['session-time-left'] ?? map['limit-uptime'] ?? '',
       bytesIn: map['bytes-in'] ?? '0',
       bytesOut: map['bytes-out'] ?? '0',
-      limitBytesTotal: map['limit-bytes-total'] ?? map['limit-bytes-out'] ?? map['bytes-total'] ?? '0',
+      // limitBytesTotal is a TOTAL (up+down) quota used by the usage/progress
+      // getters. Don't fall back to limit-bytes-out (download-only): doing so
+      // would make formattedDataLeft/dataUsageProgress compare a download cap
+      // against total up+down bytes and report wrong/exhausted figures.
+      limitBytesTotal: map['limit-bytes-total'] ?? map['bytes-total'] ?? '0',
       comment: map['comment'] ?? '',
     );
   }

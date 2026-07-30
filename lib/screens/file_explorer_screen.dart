@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:archive/archive_io.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
@@ -49,6 +51,32 @@ class _MikrotikFileExplorerScreenState extends State<MikrotikFileExplorerScreen>
       });
     }
   }
+
+  // Extensions treated as TEXT — uploaded via UTF-8 string API.
+  static const _textExtensions = {
+    '.html', '.htm', '.css', '.js', '.xml',
+    '.rsc', '.txt', '.json', '.svg',
+  };
+
+  static bool _isTextFile(String filename) {
+    final lower = filename.toLowerCase();
+    return _textExtensions.any((ext) => lower.endsWith(ext));
+  }
+
+  // Binary extensions we support uploading via raw-byte API.
+  static const _binaryExtensions = {
+    '.png', '.jpg', '.jpeg', '.gif', '.ico',
+    '.woff', '.woff2', '.ttf', '.otf', '.eot',
+    '.swf', '.mp3', '.ogg', '.wav',
+  };
+
+  static bool _isBinaryFile(String filename) {
+    final lower = filename.toLowerCase();
+    return _binaryExtensions.any((ext) => lower.endsWith(ext));
+  }
+
+  static bool _isUploadable(String filename) =>
+      _isTextFile(filename) || _isBinaryFile(filename);
 
   String get _currentDirString {
     if (_currentPath.length == 1) return '';
@@ -164,53 +192,318 @@ class _MikrotikFileExplorerScreenState extends State<MikrotikFileExplorerScreen>
     try {
       FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['html', 'txt', 'css', 'js', 'xml'],
+        allowedExtensions: [
+          'html', 'htm', 'txt', 'css', 'js', 'xml', 'rsc', 'json', 'svg',
+          'png', 'jpg', 'jpeg', 'gif', 'ico',
+          'woff', 'woff2', 'ttf', 'otf', 'eot',
+        ],
       );
 
       if (result != null && result.files.single.path != null) {
-        final File file = File(result.files.single.path!);
-        final String contents = await file.readAsString();
+        final String filePath = result.files.single.path!;
         final String fileName = result.files.single.name;
-        
         final String targetDir = _currentDirString;
         final String targetPath = targetDir.isEmpty ? fileName : '$targetDir$fileName';
-        
+
+        // Check if file already exists on router
         RouterFile? existingFile;
-        try {
-          existingFile = _allFiles.firstWhere((f) => f.name == targetPath);
-        } catch (e) {
-          existingFile = null;
-        }
-        
-        if (existingFile == null) {
-          if (!mounted) return;
-          TopToast.show(context, 'Only overwriting existing files is supported. Please pick a file named exactly like an existing one.', backgroundColor: const Color(0xFFFF5252));
-          return;
+        for (final f in _allFiles) {
+          if (f.name == targetPath) { existingFile = f; break; }
         }
 
         setState(() => _isLoading = true);
-        
-        await widget.service.setFileContents(existingFile.id, contents);
-        if (!mounted) return;
-        TopToast.show(context, 'File uploaded and overwritten successfully!', backgroundColor: const Color(0xFF00E676));
+        final isBinary = _isBinaryFile(fileName);
+
+        if (existingFile != null) {
+          if (isBinary) {
+            final bytes = await File(filePath).readAsBytes();
+            await widget.service.setFileBinaryContents(existingFile.id, bytes);
+          } else {
+            final contents = await File(filePath).readAsString();
+            await widget.service.setFileContents(existingFile.id, contents);
+          }
+          if (!mounted) return;
+          TopToast.show(context, 'File overwritten successfully!',
+              backgroundColor: const Color(0xFF00E676));
+        } else {
+          if (isBinary) {
+            final bytes = await File(filePath).readAsBytes();
+            await widget.service.createBinaryFile(targetPath, bytes);
+          } else {
+            final contents = await File(filePath).readAsString();
+            await widget.service.createFile(targetPath, contents);
+          }
+          if (!mounted) return;
+          TopToast.show(context, 'File uploaded successfully!',
+              backgroundColor: const Color(0xFF00E676));
+        }
         await _loadFiles();
       }
     } catch (e) {
       if (!mounted) return;
-      TopToast.show(context, 'Error uploading file: $e', backgroundColor: const Color(0xFFFF5252));
+      TopToast.show(context, 'Error uploading file: $e',
+          backgroundColor: const Color(0xFFFF5252));
       setState(() => _isLoading = false);
     }
   }
 
+  /// Replaces ALL files in the current folder with the contents of a ZIP archive.
+  Future<void> _replaceFolder() async {
+    if (_currentPath.length < 2) return; // Only inside a subfolder
+
+    // 1. Pick a ZIP file
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+        withData: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      TopToast.show(context, 'Could not open file picker: $e',
+          backgroundColor: const Color(0xFFFF5252));
+      return;
+    }
+    if (result == null || result.files.single.bytes == null) return;
+
+    // 2. Decode the ZIP in memory
+    Archive archive;
+    try {
+      archive = ZipDecoder().decodeBytes(result.files.single.bytes!);
+    } catch (e) {
+      if (!mounted) return;
+      TopToast.show(context, 'Invalid ZIP file: $e',
+          backgroundColor: const Color(0xFFFF5252));
+      return;
+    }
+
+    // 3. Determine prefix to strip from ZIP paths.
+    //    If the ZIP has a single top-level folder matching the current folder
+    //    name, strip it so files land directly in _currentDirString.
+    final currentFolderName = _currentPath.last; // e.g. 'hotspot'
+    final topLevelFolders = archive.files
+        .where((f) => !f.isFile)
+        .map((f) => f.name.split('/').first)
+        .toSet();
+    final String stripPrefix =
+        (topLevelFolders.length == 1 &&
+                topLevelFolders.first == currentFolderName)
+            ? '$currentFolderName/'
+            : '';
+
+    // 4. Collect ALL uploadable files from ZIP (text + binary)
+    final toUpload = <({String routerPath, List<int> bytes, bool isBinary})>[];
+    int skipped = 0;
+    for (final entry in archive.files) {
+      if (!entry.isFile) continue;
+      String relPath = entry.name;
+      if (stripPrefix.isNotEmpty && relPath.startsWith(stripPrefix)) {
+        relPath = relPath.substring(stripPrefix.length);
+      }
+      if (relPath.isEmpty) continue;
+      final routerPath = '$_currentDirString$relPath';
+      final bytes = entry.content as List<int>;
+      if (_isTextFile(relPath)) {
+        toUpload.add((routerPath: routerPath, bytes: bytes, isBinary: false));
+      } else if (_isBinaryFile(relPath)) {
+        toUpload.add((routerPath: routerPath, bytes: bytes, isBinary: true));
+      } else {
+        skipped++; // Unknown extension — skip
+      }
+    }
+
+    if (toUpload.isEmpty) {
+      if (!mounted) return;
+      TopToast.show(context, 'No uploadable files found in ZIP.',
+          backgroundColor: const Color(0xFFFF9800));
+      return;
+    }
+
+    // 5. Confirm dialog
+    final existingCount =
+        _allFiles.where((f) => f.name.startsWith(_currentDirString)).length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.folder_zip_rounded,
+                color: Color(0xFFFF9800), size: 24),
+            const SizedBox(width: 10),
+            Text('Replace Folder',
+                style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _confirmRow(Icons.delete_outline_rounded, const Color(0xFFFF5252),
+                'Delete $existingCount existing file(s) in $_currentDirString'),
+            const SizedBox(height: 8),
+            _confirmRow(Icons.upload_rounded, const Color(0xFF00E676),
+                'Upload ${toUpload.length} file(s) from ZIP'),
+            if (skipped > 0) ...[
+              const SizedBox(height: 8),
+              _confirmRow(Icons.warning_amber_rounded, const Color(0xFFFF9800),
+                  'Skip $skipped file(s) with unknown extension'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('Cancel',
+                  style: GoogleFonts.poppins(color: Colors.white54))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF5252),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12))),
+            child: Text('Replace',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    // 6. Show progress dialog and execute
+    final progress = ValueNotifier<(int, int, String)>((0, toUpload.length, ''));
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF1A1A2E),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Replacing Folder…',
+              style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15)),
+          content: ValueListenableBuilder<(int, int, String)>(
+            valueListenable: progress,
+            builder: (_, val, __) {
+              final done = val.$1;
+              final total = val.$2;
+              final label = val.$3;
+              final pct = total > 0 ? done / total : 0.0;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LinearProgressIndicator(
+                    value: done == 0 && label.isEmpty ? null : pct,
+                    backgroundColor: Colors.white12,
+                    color: const Color(0xFF00BFFF),
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    label.isEmpty
+                        ? 'Clearing old files…'
+                        : '$done / $total — $label',
+                    style: GoogleFonts.poppins(
+                        color: Colors.white70, fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    String? errorMsg;
+    try {
+      // Step A: Delete existing files in the folder
+      if (_currentDirString.isNotEmpty) {
+        await widget.service.deleteFilesInDirectory(_currentDirString);
+      }
+
+      // Step B: Upload each file (text or binary)
+      for (int i = 0; i < toUpload.length; i++) {
+        final item = toUpload[i];
+        final shortName = item.routerPath.split('/').last;
+        progress.value = (i + 1, toUpload.length, shortName);
+        if (item.isBinary) {
+          await widget.service.createBinaryFile(item.routerPath, item.bytes);
+        } else {
+          final content = utf8.decode(item.bytes);
+          await widget.service.createFile(item.routerPath, content);
+        }
+      }
+    } catch (e) {
+      errorMsg = e.toString();
+    }
+
+    progress.dispose();
+    if (!mounted) return;
+    Navigator.of(context).pop(); // Close progress dialog
+
+    if (errorMsg != null) {
+      TopToast.show(context, 'Error: $errorMsg',
+          backgroundColor: const Color(0xFFFF5252));
+    } else {
+      final skippedMsg = skipped > 0 ? ' ($skipped unknown files skipped)' : '';
+      TopToast.show(
+          context,
+          '✅ Replaced ${toUpload.length} files successfully!$skippedMsg',
+          backgroundColor: const Color(0xFF00E676));
+    }
+    await _loadFiles();
+  }
+
+  Widget _confirmRow(IconData icon, Color color, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: color, size: 16),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text,
+              style:
+                  GoogleFonts.poppins(color: Colors.white70, fontSize: 12)),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final insideFolder = _currentPath.length > 1;
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F1A),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('File Explorer', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 22)),
+        title: Text('File Explorer',
+            style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold, fontSize: 22)),
         actions: [
+          if (insideFolder)
+            Tooltip(
+              message: 'Replace all files in this folder with a ZIP',
+              child: IconButton(
+                icon: const Icon(Icons.folder_zip_rounded,
+                    color: Color(0xFFFF9800)),
+                onPressed: _replaceFolder,
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Color(0xFF00BFFF)),
             onPressed: _loadFiles,

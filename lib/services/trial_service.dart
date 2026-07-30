@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_service.dart';
 import 'mikrotik_service.dart';
@@ -19,6 +23,12 @@ class TrialService {
   static const String _proPrefix = 'pro_unlocked_';
   static const String _proExpiresPrefix = 'pro_expires_';
   static const String _legacyGlobalProKey = 'is_app_pro_unlocked';
+
+  /// Per-session device-limit verdict: once a router is denied a slot on this
+  /// device, PRO is withheld for the rest of the session (until reconnect).
+  /// Null = not yet checked. Set on first [isPro] call with a live [MikrotikService].
+  static bool? _deviceDeniedForSession;
+  static String? _deviceDeniedEmail;
 
   /// Helper to get current user's email if not provided
   static String getEmail([String? email]) {
@@ -61,7 +71,7 @@ class TrialService {
           return false;
         }
       }
-      return true;
+      return _isDeviceAllowed(userEmail, service);
     }
 
     // 2. Check MikroTik Router for this specific email
@@ -69,8 +79,8 @@ class TrialService {
       final routerPro = await service.checkRouterProFlag(userEmail);
       if (routerPro) {
         await prefs.setBool('$_proPrefix$userEmail', true);
-        CloudSyncService.saveUserState(userEmail, pro: true);
-        return true;
+        await CloudSyncService.saveUserState(userEmail, pro: true);
+        return _isDeviceAllowed(userEmail, service);
       }
     }
 
@@ -99,10 +109,59 @@ class TrialService {
       if (service != null && service.isConnected) {
         await service.setRouterProFlag(userEmail);
       }
-      return true;
+      return _isDeviceAllowed(userEmail, service);
     }
 
     return false;
+  }
+
+  /// Enforces the 3-device limit. Called from [isPro] once the account is
+  /// confirmed PRO, so the verdict applies everywhere PRO is checked — not
+  /// just the dashboard. The result is cached per session+email so we don't
+  /// hit the cloud on every [isPro] call.
+  ///
+  /// Returns true (PRO allowed) unless this router was explicitly DENIED a slot.
+  /// Offline → fail-open (allowed).
+  static Future<bool> _isDeviceAllowed(String email, MikrotikService? service) async {
+    if (service == null || !service.isConnected) return true;
+
+    // Reuse the cached verdict if it's for the same email (set on first call).
+    if (_deviceDeniedEmail == email) {
+      return _deviceDeniedForSession != true;
+    }
+
+    bool denied = false;
+    try {
+      final sysRes = await service.getResourceInfo();
+      final serial = (sysRes['serial-number'] ?? '').trim();
+      final board  = (sysRes['board-name'] ?? 'MikroTik Router').trim();
+      final routerRawId = (serial.isNotEmpty && serial.toLowerCase() != 'n/a')
+          ? serial
+          : '${board}_${sysRes['platform'] ?? ''}_${sysRes['cpu'] ?? ''}';
+
+      final result = await checkAndRegisterRouter(email, routerRawId, board);
+      denied = result == DeviceSlotResult.denied;
+    } catch (e) {
+      debugPrint('TrialService: device-limit check failed, fail-open ($e)');
+      denied = false;
+    }
+
+    _deviceDeniedForSession = denied;
+    _deviceDeniedEmail = email;
+    return !denied;
+  }
+
+  /// Returns whether the connected router was denied a PRO device slot this
+  /// session (after [isPro] has run). Used by the dashboard to show the limit
+  /// dialog only once, on the transition into denied.
+  static bool get isCurrentDeviceDenied =>
+      _deviceDeniedForSession == true;
+
+  /// Clears the cached device verdict (e.g. on logout/disconnect), so the next
+  /// login re-checks against the cloud.
+  static void clearDeviceVerdict() {
+    _deviceDeniedForSession = null;
+    _deviceDeniedEmail = null;
   }
 
   /// Returns the Pro expiration date string if it exists, otherwise null
@@ -167,8 +226,14 @@ class TrialService {
       // Sync Trial flag
       final cloudTrialUsed = cloudData['trial_used'] == true;
       final localTrialUsed = prefs.getBool('$_trialPrefix$userEmail') ?? false;
-      
-      if (!cloudTrialUsed && localTrialUsed) {
+
+      if (cloudTrialUsed && !localTrialUsed) {
+        // Cloud says trial is used — propagate down to local and router
+        await prefs.setBool('$_trialPrefix$userEmail', true);
+        if (service != null && service.isConnected) {
+          await service.setRouterTrialFlag(userEmail);
+        }
+      } else if (!cloudTrialUsed && localTrialUsed) {
         // Admin has reset the trial in the cloud, so clear it locally
         await prefs.remove('$_trialPrefix$userEmail');
         if (service != null && service.isConnected) {
@@ -207,7 +272,7 @@ class TrialService {
       final routerUsed = await service.checkRouterTrialFlag(userEmail);
       if (routerUsed) {
         await prefs.setBool('$_trialPrefix$userEmail', true);
-        CloudSyncService.saveUserState(userEmail, trialUsed: true);
+        await CloudSyncService.saveUserState(userEmail, trialUsed: true);
         return true;
       }
     }
@@ -279,5 +344,54 @@ class TrialService {
       await service.removeAllProFlags();
     }
   }
+
+  // ─── Router Device Limit (Max 3 MikroTik per PRO Gmail) ──────────────────
+
+  /// Generates a 16-char HMAC-SHA256 hex hash of [rawId] for use as a
+  /// stable, opaque router key in Firebase (no serial exposed in plain text).
+  static String _routerIdHash(String rawId) {
+    final secret = dotenv.env['VOUCHER_APP_SECRET'] ?? 'va_fallback_secret';
+    final key = utf8.encode(secret);
+    final msg = utf8.encode(rawId.trim().toLowerCase());
+    final hmac = Hmac(sha256, key);
+    return hmac.convert(msg).toString().substring(0, 16);
+  }
+
+  /// Checks whether [routerRawId] (serial number or fallback) is an allowed
+  /// device for this PRO [email] account, registering it if a slot is free.
+  ///
+  /// Returns:
+  ///   [DeviceSlotResult.allowed]     — already registered, no action needed.
+  ///   [DeviceSlotResult.registered]  — newly registered, slot consumed.
+  ///   [DeviceSlotResult.denied]      — all 3 slots taken by other routers.
+  ///   [DeviceSlotResult.offline]     — cloud unreachable; access is permitted.
+  static Future<DeviceSlotResult> checkAndRegisterRouter(
+    String email,
+    String routerRawId,
+    String routerLabel,
+  ) async {
+    if (email.isEmpty || routerRawId.isEmpty) return DeviceSlotResult.offline;
+
+    final routerIdHash = _routerIdHash(routerRawId);
+    final result = await CloudSyncService.registerRouter(email, routerIdHash, routerLabel);
+
+    switch (result) {
+      case 'allowed':     return DeviceSlotResult.allowed;
+      case 'registered':  return DeviceSlotResult.registered;
+      case 'denied':      return DeviceSlotResult.denied;
+      default:            return DeviceSlotResult.offline; // 'error' → fail-open
+    }
+  }
 }
 
+/// Result of a device-slot check for a PRO Gmail account.
+enum DeviceSlotResult {
+  /// This router was already registered — no slot consumed.
+  allowed,
+  /// This router was just registered — slot consumed.
+  registered,
+  /// All 3 device slots are taken by other routers.
+  denied,
+  /// Cloud was unreachable — access is permitted (fail-open).
+  offline,
+}

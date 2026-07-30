@@ -50,6 +50,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _isPro = false;
   String? _proExpiresAt;
   bool _fileManagerUnlocked = false;
+  bool _pppoeUnlocked = false; // admin-gated PPPoE Clients feature
+  bool _shownDeviceLimitDialog = false; // fires the limit dialog once per denied session
 
   Timer? _trafficTimer;
   String? _monitoredInterface;
@@ -121,20 +123,38 @@ class _DashboardScreenState extends State<DashboardScreen>
       
       final sysRes = await widget.service.getResourceInfo();
       final interfaces = await widget.service.getInterfaces();
+
+      // ── Device-Limit Check ─────────────────────────────────────────────────
+      // isPro() above already enforced the 3-device limit (it's the single
+      // source of truth every screen consults), so if this router was denied a
+      // slot, isPro came back false. Read the cached verdict for the one-shot
+      // dialog only — no second cloud call here.
+      final deviceDenied = isPro ? false : TrialService.isCurrentDeviceDenied;
+      // ──────────────────────────────────────────────────────────────────────
       if (!mounted) return;
       setState(() {
         _vouchers = vouchers;
         _activeSessions = activeSessions;
         _trialLocked = trialLocked;
-        _isPro = isPro;
+        _isPro = isPro; // already accounts for device limit
         _proExpiresAt = proExpiresAt;
         _fileManagerUnlocked = settings['file_manager_unlocked'] == true;
+        _pppoeUnlocked = settings['pppoe_unlocked'] == true;
         _systemResource = sysRes;
         _loading = false;
       });
       _fadeCtrl.forward(from: 0);
-      
       _startTrafficMonitoring(interfaces);
+
+      // Show the device-limit dialog only on the transition INTO denied, not on
+      // every reload. _shownDeviceLimitDialog guards against re-firing when the
+      // user navigates back or hits refresh while already denied.
+      if (deviceDenied && !_shownDeviceLimitDialog && mounted) {
+        _shownDeviceLimitDialog = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showDeviceLimitDialog();
+        });
+      }
 
       if (currentUserEmail != null) {
         final prefs = await SharedPreferences.getInstance();
@@ -220,9 +240,103 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _disconnect() async {
     await widget.service.disconnect();
+    // Clear the per-session device-limit verdict so the next login re-checks
+    // against the cloud (a slot may have been freed by an admin meanwhile).
+    TrialService.clearDeviceVerdict();
+    _shownDeviceLimitDialog = false;
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
+  /// Shown when a PRO account has used all 3 device slots and this router
+  /// is not among the registered ones.
+  void _showDeviceLimitDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF5252).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.devices_other_rounded,
+                  color: Color(0xFFFF5252), size: 26),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Device Limit Reached',
+                style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your PRO account is already linked to 3 MikroTik routers — the maximum allowed.',
+              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF9800).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded,
+                      color: Color(0xFFFF9800), size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This router has been treated as FREE/Trial. Contact admin to remove one of your registered devices.',
+                      style: GoogleFonts.poppins(
+                          color: const Color(0xFFFFB74D), fontSize: 11, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('OK, Continue as Free',
+                style: GoogleFonts.poppins(color: Colors.white54, fontSize: 13)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _disconnect();
+            },
+            icon: const Icon(Icons.logout_rounded, size: 16),
+            label: Text('Disconnect',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF5252),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -281,7 +395,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     required bool availableOnly,
   }) {
     return _vouchers.where((v) {
-      if (availableOnly && (v.isUsed || v.disabled)) return false;
+      if (availableOnly && (v.isUsed || v.isExpired || v.disabled)) return false;
 
       if (batch != 'all') {
         final bMatch = RegExp(r'Date:(\d{4}-\d{2}-\d{2})').firstMatch(v.comment);
@@ -1766,7 +1880,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 Expanded(flex: 2, child: Text(u.address.isNotEmpty ? u.address : '-', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12))),
                 Expanded(flex: 2, child: Text(u.macAddress.isNotEmpty ? u.macAddress : '-', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12))),
                 Expanded(flex: 2, child: Text(u.uptime.isNotEmpty ? u.uptime : '-', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12))),
-                Expanded(flex: 2, child: Text(u.bytesOut.isNotEmpty ? u.bytesOut : '-', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12))),
+                Expanded(flex: 2, child: Text(u.formattedDataUsage, style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12))),
               ],
             ),
           )).toList(),

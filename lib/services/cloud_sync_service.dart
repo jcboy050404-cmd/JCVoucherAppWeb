@@ -191,6 +191,96 @@ class CloudSyncService {
     }
   }
 
+  // ─── Router Device Limit (Max 3 per PRO Gmail) ────────────────────────────
+
+  /// Returns the map of routers registered for [email].
+  /// Keys are hashed router IDs; values contain 'label' and 'registered_at'.
+  static Future<Map<String, dynamic>> getRegisteredRouters(String email) async {
+    if (email.isEmpty || email == 'default_user') return {};
+    final key = _cleanEmail(email);
+    final url = Uri.parse(_auth('$_baseUrl/$key/registered_routers.json'));
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200 && response.body != 'null') {
+        final data = json.decode(response.body);
+        if (data is Map) return Map<String, dynamic>.from(data);
+      }
+    } catch (e) {
+      debugPrint('CloudSyncService: getRegisteredRouters error ($e)');
+    }
+    return {};
+  }
+
+  /// Attempts to register [routerIdHash] for [email].
+  ///
+  /// Returns:
+  ///   'allowed'   — router was already registered (no change needed).
+  ///   'registered'— router was newly registered (slot consumed).
+  ///   'denied'    — all 3 slots are taken by other routers.
+  ///   'error'     — network/cloud failure.
+  static const int kMaxRoutersPerAccount = 3;
+
+  static Future<String> registerRouter(
+    String email,
+    String routerIdHash,
+    String label,
+  ) async {
+    if (email.isEmpty || routerIdHash.isEmpty) return 'error';
+    final key = _cleanEmail(email);
+    final baseRouterUrl = '$_baseUrl/$key/registered_routers';
+
+    try {
+      // 1. Fetch current registrations
+      final existing = await getRegisteredRouters(email);
+
+      // 2. Already registered → allow immediately
+      if (existing.containsKey(routerIdHash)) {
+        debugPrint('CloudSyncService: Router $routerIdHash already registered for $email');
+        return 'allowed';
+      }
+
+      // 3. Slots full → deny
+      if (existing.length >= kMaxRoutersPerAccount) {
+        debugPrint('CloudSyncService: Device limit reached for $email (${existing.length}/$kMaxRoutersPerAccount)');
+        return 'denied';
+      }
+
+      // 4. Register the new router
+      final url = Uri.parse(_auth('$baseRouterUrl/$routerIdHash.json'));
+      final payload = {
+        'label': label.isNotEmpty ? label : 'MikroTik Router',
+        'registered_at': DateTime.now().toIso8601String(),
+      };
+      final response = await http.put(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(payload),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        debugPrint('CloudSyncService: Registered router $routerIdHash for $email');
+        return 'registered';
+      }
+    } catch (e) {
+      debugPrint('CloudSyncService: registerRouter error ($e)');
+    }
+    return 'error';
+  }
+
+  /// Removes a registered router entry for [email] (admin utility).
+  static Future<bool> removeRouter(String email, String routerIdHash) async {
+    if (email.isEmpty || routerIdHash.isEmpty) return false;
+    final key = _cleanEmail(email);
+    final url = Uri.parse(_auth('$_baseUrl/$key/registered_routers/$routerIdHash.json'));
+    try {
+      final response = await http.delete(url).timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('CloudSyncService: removeRouter error ($e)');
+      return false;
+    }
+  }
+
   /// Retrieves the user's PIN from Firebase (if set).
   static Future<String?> getUserPin(String email) async {
     if (email.isEmpty || email == 'default_user') return null;

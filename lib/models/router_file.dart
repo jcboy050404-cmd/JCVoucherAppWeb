@@ -32,5 +32,6 @@ class RouterFile {
       name.endsWith('.txt') ||
       name.endsWith('.css') ||
       name.endsWith('.js') ||
+      name.endsWith('.xml') ||
       name.endsWith('.rsc');
 }
