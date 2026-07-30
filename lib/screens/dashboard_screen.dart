@@ -1378,7 +1378,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                                   _buildSidebarItem(3, Icons.people_alt_outlined, 'Active Sessions', isNew: false),
                                   _buildSidebarItem(4, Icons.speed_rounded, 'Profiles', isNew: false),
                                   _buildSidebarItem(5, Icons.code_rounded, 'Scripts', isNew: false),
-                                  _buildSidebarItem(6, Icons.network_check_rounded, 'PPPoE', isNew: true),
+                                  if (_pppoeUnlocked || isAdmin)
+                                    _buildSidebarItem(6, Icons.network_check_rounded, 'PPPoE', isNew: true)
+                                  else
+                                    _buildSidebarItem(-4, Icons.lock_outline_rounded, 'PPPoE', isAction: true, onTap: () {
+                                      TopToast.show(context, 'PPPoE feature is currently locked by the Admin', backgroundColor: const Color(0xFFF57C00));
+                                    }),
                                   if (_fileManagerUnlocked || isAdmin)
                                     _buildSidebarItem(7, Icons.folder_open_rounded, 'Files', isNew: true),
                                   _buildSidebarItem(-1, Icons.print_rounded, 'Print', isAction: true, onTap: _showPrintOptionsModal),
@@ -2636,15 +2641,32 @@ class _DashboardScreenState extends State<DashboardScreen>
                             gradient: const [Color(0xFF00BFE0), Color(0xFF0099CC)],
                             onTap: _showPrintOptionsModal,
                           ),
-                          _buildActionItem(
-                            icon: Icons.alt_route_rounded,
-                            label: 'PPPoE\nClients',
-                            gradient: const [Color(0xFFBB86FC), Color(0xFF6200EE)],
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => PppoeScreen(service: widget.service)),
-                              );
-                              _loadData();
+                          Builder(
+                            builder: (context) {
+                              final currentUser = AuthService.instance.currentUser;
+                              final isAdmin = AuthService.isCurrentUserAdmin(currentUser?.email);
+                              if (isAdmin || _pppoeUnlocked) {
+                                return _buildActionItem(
+                                  icon: Icons.alt_route_rounded,
+                                  label: 'PPPoE\nClients',
+                                  gradient: const [Color(0xFFBB86FC), Color(0xFF6200EE)],
+                                  onTap: () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => PppoeScreen(service: widget.service)),
+                                    );
+                                    _loadData();
+                                  },
+                                );
+                              } else {
+                                return _buildActionItem(
+                                  icon: Icons.lock_outline_rounded,
+                                  label: 'PPPoE\nLocked',
+                                  gradient: const [Color(0xFF757575), Color(0xFF424242)],
+                                  onTap: () {
+                                    TopToast.show(context, 'PPPoE feature is currently locked by the Admin', backgroundColor: const Color(0xFFF57C00));
+                                  },
+                                );
+                              }
                             },
                           ),
                           Builder(
