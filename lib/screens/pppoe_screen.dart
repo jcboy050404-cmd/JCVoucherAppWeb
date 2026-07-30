@@ -1,11 +1,14 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import '../widgets/top_toast.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/mikrotik_service.dart';
 import '../services/pppoe_billing_service.dart';
+import '../services/auto_sms_service.dart';
 import '../models/pppoe_user.dart';
 
 
@@ -88,6 +91,20 @@ class _PppoeScreenState extends State<PppoeScreen>
           _activeSessions = active;
           _profiles = profiles;
           _isLoading = false;
+        });
+
+        // Cache a snapshot of due users so the periodic background reminder
+        // check (started from the dashboard) can run without a live router
+        // connection, then fire an immediate pass for this screen.
+        AutoSmsService.saveReminderSnapshot(mergedSecrets);
+        AutoSmsService.checkAndSendAutoReminders(mergedSecrets).then((sentCount) {
+          if (sentCount > 0 && mounted) {
+            TopToast.show(
+              context,
+              '📱 Automatically sent $sentCount payment reminder SMS!',
+              backgroundColor: const Color(0xFF34A853),
+            );
+          }
         });
       }
     } catch (e) {
@@ -292,6 +309,319 @@ class _PppoeScreenState extends State<PppoeScreen>
             label: Text('Copy Text', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Ensures the SMS permission is granted before enabling/using Auto SMS.
+  /// - If already granted → returns true.
+  /// - If not yet permanently denied → requests it.
+  /// - If permanently denied → shows a dialog offering to open system Settings,
+  ///   which is the ONLY way to re-enable the (greyed-out) SMS permission.
+  ///
+  /// This fixes "Allowed is disabled": when the system permission dialog can no
+  /// longer appear, the app must send the user to Settings explicitly.
+  Future<bool> _ensureSmsPermissionOrExplain(BuildContext modalCtx) async {
+    final granted = await AutoSmsService.requestPermission();
+    if (granted) return true;
+
+    final permanentlyDenied = await AutoSmsService.isPermanentlyDenied();
+    if (!mounted) return false;
+
+    await showDialog(
+      context: modalCtx,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.sms_failed_rounded, color: Color(0xFFFF9800), size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('SMS Permission Required',
+                  style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            ),
+          ],
+        ),
+        content: Text(
+          permanentlyDenied
+              ? 'SMS access was denied permanently. Android can no longer show the permission prompt here. Open App Settings and enable "SMS" to allow sending payment reminders.'
+              : 'Auto SMS needs permission to send payment reminders from your SIM. Please grant SMS access to continue.',
+          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.white54)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              if (permanentlyDenied) {
+                openAppSettings();
+              } else {
+                Permission.sms.request();
+              }
+            },
+            icon: const Icon(Icons.settings_rounded, size: 16),
+            label: Text(permanentlyDenied ? 'Open Settings' : 'Grant',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00BFFF),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+    return false;
+  }
+
+  Future<void> _showAutoSmsSettingsModal() async {
+    bool enabled = await AutoSmsService.isEnabled();
+    int daysBefore = await AutoSmsService.getDaysBefore();
+    String template = await AutoSmsService.getTemplate();
+    // If the feature is enabled but the permission was later revoked in system
+    // Settings, we must reflect that so the toggle and test button behave
+    // correctly (and show the "Open Settings" path).
+    bool hasPermission = Platform.isAndroid
+        ? await AutoSmsService.requestPermission()
+        : false;
+
+    final tplCtrl = TextEditingController(text: template);
+    final testPhoneCtrl = TextEditingController();
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.88,
+            ),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              top: 16,
+              left: 20,
+              right: 20,
+            ),
+            decoration: const BoxDecoration(
+              color: Color(0xFF141426),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              border: Border(top: BorderSide(color: Color(0xFF00E676), width: 1.5)),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      const Icon(Icons.mark_as_unread_rounded, color: Color(0xFF00E676), size: 22),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Automated SMS Settings',
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    activeThumbColor: const Color(0xFF00E676),
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Enable Auto SMS Reminders',
+                      style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      hasPermission
+                          ? 'Automatically sends SMS using your SIM load when PPPoE bill is due.'
+                          : '⚠️ SMS permission missing — tap to grant access, otherwise reminders won\'t send.',
+                      style: GoogleFonts.poppins(
+                        color: hasPermission ? Colors.white54 : const Color(0xFFFFB74D),
+                        fontSize: 12,
+                      ),
+                    ),
+                    value: enabled,
+                    onChanged: (val) async {
+                      if (val) {
+                        // Turning ON requires the SMS permission. If it can't
+                        // be obtained, explain why (and offer Settings) instead
+                        // of silently flipping the toggle on.
+                        final ok = await _ensureSmsPermissionOrExplain(ctx);
+                        if (!ok) return;
+                        await AutoSmsService.setEnabled(true);
+                        setModalState(() {
+                          enabled = true;
+                          hasPermission = true;
+                        });
+                      } else {
+                        await AutoSmsService.setEnabled(false);
+                        setModalState(() => enabled = false);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Send Reminder When:',
+                    style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: daysBefore,
+                        dropdownColor: const Color(0xFF18182A),
+                        isExpanded: true,
+                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                        items: const [
+                          DropdownMenuItem(value: 0, child: Text('On Due Date', style: TextStyle(color: Colors.white))),
+                          DropdownMenuItem(value: 1, child: Text('1 Day Before Due Date', style: TextStyle(color: Colors.white))),
+                          DropdownMenuItem(value: 2, child: Text('2 Days Before Due Date', style: TextStyle(color: Colors.white))),
+                          DropdownMenuItem(value: 3, child: Text('3 Days Before Due Date', style: TextStyle(color: Colors.white))),
+                        ],
+                        onChanged: (val) async {
+                          if (val != null) {
+                            await AutoSmsService.setDaysBefore(val);
+                            setModalState(() => daysBefore = val);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'SMS Message Template:',
+                    style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Placeholders: {name}, {amount}, {date}, {days}',
+                    style: GoogleFonts.poppins(color: const Color(0xFF00BFFF), fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: tplCtrl,
+                    maxLines: 3,
+                    style: GoogleFonts.poppins(fontSize: 13, color: Colors.white),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.04),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF00E676))),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Send Test SMS:',
+                    style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: testPhoneCtrl,
+                          keyboardType: TextInputType.phone,
+                          style: GoogleFonts.poppins(fontSize: 13, color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'e.g. 09171234567',
+                            hintStyle: GoogleFonts.poppins(fontSize: 12, color: Colors.white30),
+                            filled: true,
+                            fillColor: Colors.white.withValues(alpha: 0.04),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00E676),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () async {
+                          final phone = testPhoneCtrl.text.trim();
+                          if (phone.isEmpty) {
+                            TopToast.show(ctx, 'Please enter a test phone number', backgroundColor: Colors.redAccent);
+                            return;
+                          }
+                          // Ensure permission before sending; if missing, the
+                          // helper explains (and offers Settings) and we abort.
+                          final granted = await _ensureSmsPermissionOrExplain(ctx);
+                          if (!granted) return;
+                          setModalState(() => hasPermission = true);
+                          final msg = tplCtrl.text
+                              .replaceAll('{name}', 'Test Client')
+                              .replaceAll('{amount}', '500')
+                              .replaceAll('{date}', '2026-08-01')
+                              .replaceAll('{days}', '1');
+                          final ok = await AutoSmsService.sendDirectSms(phone: phone, message: msg);
+                          if (!ctx.mounted) return;
+                          if (ok) {
+                            TopToast.show(ctx, '✅ Test SMS sent to $phone!', backgroundColor: const Color(0xFF34A853));
+                          } else {
+                            TopToast.show(ctx, '❌ Failed to send SMS. Check SMS permission.', backgroundColor: Colors.redAccent);
+                          }
+                        },
+                        child: Text('Test', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00BFFF),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () async {
+                        await AutoSmsService.setTemplate(tplCtrl.text.trim());
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        TopToast.show(ctx, '✅ Auto SMS Settings saved!', backgroundColor: const Color(0xFF34A853));
+                      },
+                      child: Text(
+                        'Save Settings',
+                        style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -738,6 +1068,11 @@ class _PppoeScreenState extends State<PppoeScreen>
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.mark_as_unread_rounded, color: Color(0xFF00E676)),
+            tooltip: 'Automated SMS Settings',
+            onPressed: _showAutoSmsSettingsModal,
+          ),
           if (_overdueCount > 0)
             IconButton(
               icon: const Icon(Icons.block_rounded, color: Colors.redAccent),

@@ -13,6 +13,7 @@ import '../services/trial_service.dart';
 import '../services/auth_service.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/force_update_service.dart';
+import '../services/auto_sms_service.dart';
 import '../models/voucher.dart';
 import '../responsive.dart';
 import '../widgets/stat_card.dart';
@@ -40,7 +41,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen>
-    with TickerProviderStateMixin, RouteAware {
+    with WidgetsBindingObserver, TickerProviderStateMixin, RouteAware {
   bool _loading = true;
   bool _isLoadingData = false;
   List<Voucher> _vouchers = [];
@@ -74,6 +75,11 @@ class _DashboardScreenState extends State<DashboardScreen>
       duration: const Duration(milliseconds: 600),
     );
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    // Observe app lifecycle so we can fire a reminder pass whenever the app
+    // returns to the foreground — operators frequently background the app and
+    // resume it the next day, and we want due-client reminders to re-check
+    // immediately on resume, not only on the 4h timer.
+    WidgetsBinding.instance.addObserver(this);
     _loadData();
     // Re-run the force-update check after login. This catches the case where
     // an admin publishes a new required version while the app is already
@@ -91,6 +97,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     routeObserver.unsubscribe(this);
     _fadeCtrl.dispose();
     _trafficTimer?.cancel();
@@ -102,6 +109,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     // A child screen (Generate, Voucher list, etc.) was popped — refresh
     // stats so newly created vouchers are reflected immediately.
     _loadData();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When the operator brings the app back to the foreground, re-run the
+    // reminder check against the cached snapshot. This catches the common case
+    // of backgrounding the app today and resuming it tomorrow — the in-process
+    // timer would otherwise not fire until its next scheduled tick.
+    if (state == AppLifecycleState.resumed) {
+      AutoSmsService.runFromSnapshot();
+    }
   }
 
   Future<void> _loadData() async {
@@ -155,6 +173,11 @@ class _DashboardScreenState extends State<DashboardScreen>
           if (mounted) _showDeviceLimitDialog();
         });
       }
+
+      // Start the periodic background reminder check (every few hours) so
+      // PPPoE payment reminders still send even if the operator never opens
+      // the PPPoE Clients screen. Safe/cheap — uses the cached snapshot.
+      AutoSmsService.startBackgroundChecks();
 
       if (currentUserEmail != null) {
         final prefs = await SharedPreferences.getInstance();
@@ -243,6 +266,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     // Clear the per-session device-limit verdict so the next login re-checks
     // against the cloud (a slot may have been freed by an admin meanwhile).
     TrialService.clearDeviceVerdict();
+    // Stop the background SMS reminder timer; it restarts on next login.
+    AutoSmsService.stopBackgroundChecks();
     _shownDeviceLimitDialog = false;
     if (!mounted) return;
     Navigator.of(context).pushReplacement(

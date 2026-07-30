@@ -2,6 +2,7 @@
     
     <!-- EXACT PLACEMENT: Permissions must be OUTSIDE the application tag -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.SEND_SMS"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -61,6 +62,14 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Declares visibility for the SMS app so permission_handler can
+             correctly resolve SEND_SMS on Android 11+ (API 30+), where
+             package visibility is restricted by default. Without this, the
+             permission prompt may be skipped or misreported. -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="smsto"/>
         </intent>
     </queries>
 </manifest>

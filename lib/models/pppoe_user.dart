@@ -49,6 +49,26 @@ class PppoeUser {
     return days != null && days > 0 && days <= 3;
   }
 
+  /// Extracts mobile phone number (09XXXXXXXXX or +639XXXXXXXXX) from comment,
+  /// callerId, or name.
+  ///
+  /// The lookbehind/lookahead (`(?<!\d)` / `(?!\d)`) ensure the match is a
+  /// *standalone* number — a stray "6391234567890" inside an unrelated string
+  /// won't false-match, and a number already preceded/followed by other digits
+  /// is rejected so we don't grab a partial slice of a longer ID.
+  static final RegExp _phoneReg =
+      RegExp(r'(?<!\d)(?:\+?639\d{9}|09\d{9})(?!\d)');
+
+  String? get phoneNumber {
+    final matchComment = _phoneReg.firstMatch(comment);
+    if (matchComment != null) return matchComment.group(0);
+    final matchCaller = _phoneReg.firstMatch(callerId);
+    if (matchCaller != null) return matchCaller.group(0);
+    final matchName = _phoneReg.firstMatch(name);
+    if (matchName != null) return matchName.group(0);
+    return null;
+  }
+
   factory PppoeUser.fromSecretMap(Map<String, String> map) {
     return PppoeUser(
       id: map['.id'] ?? '',
