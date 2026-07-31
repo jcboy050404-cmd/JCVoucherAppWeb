@@ -524,7 +524,40 @@ class _MikrotikFileExplorerScreenState extends State<MikrotikFileExplorerScreen>
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF00BFFF)))
                 : _error != null
                     ? Center(
-                        child: Text(_error!, style: GoogleFonts.poppins(color: const Color(0xFFFF5252))),
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.cloud_off_rounded, size: 56, color: Color(0xFFFF5252)),
+                              const SizedBox(height: 16),
+                              Text('Could not load files',
+                                  style: GoogleFonts.poppins(
+                                      color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                                  textAlign: TextAlign.center),
+                              const SizedBox(height: 8),
+                              Container(
+                                constraints: const BoxConstraints(maxHeight: 140),
+                                child: SingleChildScrollView(
+                                  child: Text(_error ?? '',
+                                      style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12),
+                                      textAlign: TextAlign.center),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              ElevatedButton.icon(
+                                onPressed: _loadFiles,
+                                icon: const Icon(Icons.refresh_rounded, size: 18),
+                                label: Text('Retry', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF00BFFF),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       )
                     : _currentFiles.isEmpty
                         ? Center(

@@ -295,8 +295,14 @@ class MikrotikService {
 
   /// Wait until buffer has [n] bytes, with timeout.
   /// Uses a polling loop with Future.delayed to avoid Completer race conditions.
+  ///
+  /// 30s default: RouterOS commands that return large lists (e.g. /file/print
+  /// on a router with many hotspot image files, or /ip/hotspot/user/print with
+  /// thousands of vouchers) can legitimately exceed the old 8s ceiling and then
+  /// throw a misleading "response timeout" — which surfaced as "could not load
+  /// files" in the File Manager.
   Future<void> _waitForBytes(int n,
-      {Duration timeout = const Duration(seconds: 8)}) async {
+      {Duration timeout = const Duration(seconds: 30)}) async {
     final deadline = DateTime.now().add(timeout);
     while (_unreadBytes < n) {
       if (!_connected || _socket == null) {
@@ -331,7 +337,13 @@ class MikrotikService {
 
       final wordBytes = _buffer.sublist(
           _readOffset + headerLen, _readOffset + headerLen + wordLen);
-      words.add(utf8.decode(wordBytes));
+      // allowMalformed: a word can carry binary file contents (e.g. when
+      // /file/print detail returns a PNG/font body inline). Strict utf8.decode
+      // throws FormatException on those bytes and crashes the entire response
+      // read — surfacing as "unexpected extension byte". allowMalformed swaps
+      // invalid bytes for U+FFFD so the read always completes. Text files are
+      // unaffected (valid UTF-8 decodes identically).
+      words.add(utf8.decode(wordBytes, allowMalformed: true));
       _readOffset += headerLen + wordLen;
     }
     return words;
@@ -1801,11 +1813,17 @@ class MikrotikService {
 
   Future<List<RouterFile>> getFiles({String? directory}) async {
     return _execute(() async {
-      // Use 'detail' to get all properties including 'contents' (for small text files)
-      _send(['/file/print', 'detail']);
+      // Plain /file/print — NO 'proplist' and NO 'detail'. Some RouterOS
+      // versions reject '=proplist=' with "unknown parameter", and 'detail'
+      // mode embeds each file's contents inline (bloat + parse issues). The
+      // bare command returns the standard field set and is universally
+      // supported. The 30s read timeout (see _waitForBytes) covers large
+      // routers with many files.
+      _send(['/file/print']);
       final response = await _readResponse();
       final trap = _getTrapData(response);
       if (trap != null) {
+        debugPrint('MikrotikService.getFiles trap: $trap');
         throw Exception(trap['message'] ?? 'Failed to get files');
       }
 
@@ -1823,6 +1841,7 @@ class MikrotikService {
           }
         }
       }
+      debugPrint('MikrotikService.getFiles: parsed ${files.length} files');
       return files;
     });
   }

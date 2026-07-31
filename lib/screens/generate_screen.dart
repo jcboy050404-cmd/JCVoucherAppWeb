@@ -30,6 +30,7 @@ class _GenerateScreenState extends State<GenerateScreen> {
   final _priceController = TextEditingController();
   final _codeLengthController = TextEditingController(text: '6');
   final _customerNameController = TextEditingController();
+  final _dataLimitNumController = TextEditingController();
 
   int _count = 1;
   String _selectedProfile = 'default';
@@ -42,6 +43,9 @@ class _GenerateScreenState extends State<GenerateScreen> {
   bool _isCustomUptime = false;
   String _customUptimeUnit = 'h'; // 'h' or 'd'
   String _validityUnit = 'd'; // 'h' or 'd'
+  // Per-voucher data quota. 'None' = unlimited. Mirrors the profile data-limit
+  // units; the value is converted to bytes via the same multipliers when sent.
+  String _dataLimitUnit = 'None';
   bool _generating = false;
   int _progressCurrent = 0;
   String? _errorMsg;
@@ -531,6 +535,7 @@ class _GenerateScreenState extends State<GenerateScreen> {
     _priceController.dispose();
     _codeLengthController.dispose();
     _customerNameController.dispose();
+    _dataLimitNumController.dispose();
     super.dispose();
   }
 
@@ -596,6 +601,19 @@ class _GenerateScreenState extends State<GenerateScreen> {
       effectiveUptime = _selectedUptime;
     }
 
+    // Per-voucher data quota. Convert the entered amount + unit to a raw byte
+    // string for RouterOS 'limit-bytes-total'. Mirrors the byte math used by
+    // the profile editor (1073741824 for GB, 1048576 for MB). Empty/None =
+    // unlimited (no limit-bytes-total sent).
+    String effectiveLimitBytes = '';
+    if (_dataLimitUnit != 'None' && _dataLimitNumController.text.trim().isNotEmpty) {
+      final val = int.tryParse(_dataLimitNumController.text.trim()) ?? 0;
+      if (val > 0) {
+        final multiplier = _dataLimitUnit == 'GB' ? 1073741824 : 1048576;
+        effectiveLimitBytes = '${val * multiplier}';
+      }
+    }
+
     String customComment = _commentController.text.trim();
     String effectiveComment = '';
     if (customComment.isNotEmpty) {
@@ -655,6 +673,7 @@ class _GenerateScreenState extends State<GenerateScreen> {
           profile: _selectedProfile,
           comment: effectiveComment,
           limitUptime: effectiveUptime,
+          limitBytes: effectiveLimitBytes,
         );
         generated.add(voucher);
         if (mounted) {
@@ -1643,7 +1662,105 @@ class _GenerateScreenState extends State<GenerateScreen> {
                               ),
                       ),
 
-                      // 5. Customer Name Section
+                      // 5. Data Limit section (per-voucher byte quota)
+                      _FormCardSection(
+                        header: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _SectionLabel('Data Limit'),
+                            Text(
+                              _dataLimitUnit == 'None' ? 'Unlimited' : 'Per Voucher',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: _dataLimitUnit == 'None'
+                                    ? Colors.white38
+                                    : const Color(0xFF00E676),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Cap each voucher\'s total data (upload + download). RouterOS enforces the quota automatically.',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: Colors.white38,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: TextFormField(
+                                    controller: _dataLimitNumController,
+                                    keyboardType: TextInputType.number,
+                                    enabled: _dataLimitUnit != 'None',
+                                    style: GoogleFonts.poppins(
+                                      color: _dataLimitUnit != 'None'
+                                          ? Colors.white
+                                          : Colors.white24,
+                                      fontSize: 14,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: _dataLimitUnit == 'None' ? 'Unlimited' : 'Amount',
+                                      hintStyle: GoogleFonts.poppins(color: Colors.white24),
+                                      prefixIcon: const Icon(Icons.data_usage_rounded, color: Colors.white38, size: 18),
+                                      filled: true,
+                                      fillColor: Colors.white.withValues(alpha: 0.05),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: const BorderSide(color: Color(0xFF00E676)),
+                                      ),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 1,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.05),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: _dataLimitUnit,
+                                        isExpanded: true,
+                                        dropdownColor: const Color(0xFF161626),
+                                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white60),
+                                        style: GoogleFonts.poppins(color: Colors.white),
+                                        items: ['None', 'MB', 'GB']
+                                            .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                                            .toList(),
+                                        onChanged: (val) {
+                                          if (val != null) {
+                                            setState(() {
+                                              _dataLimitUnit = val;
+                                              if (val == 'None') {
+                                                _dataLimitNumController.clear();
+                                              }
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // 6. Customer Name Section
                       _FormCardSection(
                         header: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

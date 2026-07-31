@@ -26,7 +26,14 @@ class RouterFile {
     );
   }
 
-  bool get isDirectory => type.toLowerCase() == 'directory';
+  /// A folder is anything RouterOS reports as 'directory' OR 'disk' (the
+  /// `flash/` partition and other disk mounts come back as type 'disk'), or any
+  /// entry whose name ends with '/' (RouterOS marks folders that way). Matching
+  /// all three ensures drives like `flash` aren't mis-shown as plain files.
+  bool get isDirectory =>
+      type.toLowerCase() == 'directory' ||
+      type.toLowerCase() == 'disk' ||
+      name.endsWith('/');
   bool get isTextFile =>
       name.endsWith('.html') ||
       name.endsWith('.txt') ||

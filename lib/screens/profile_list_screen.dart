@@ -49,10 +49,14 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
     final nameCtrl = TextEditingController(text: profile?.name ?? '');
     final rateCtrl = TextEditingController(text: profile?.rateLimit ?? '');
     final sharedCtrl = TextEditingController(text: profile?.sharedUsers ?? '1');
-    
+
+    // Profile-level data limit — acts as the DEFAULT for vouchers that have no
+    // per-voucher limit. The on-login script only applies when the voucher's
+    // limit is still 0 (i.e. never set), so an explicit per-voucher limit set
+    // on the Generate screen always wins and is never clobbered on login.
     String dataLimitUnit = 'None';
     final dataLimitCtrl = TextEditingController();
-    
+
     final scriptContent = profile?.onLogin ?? '';
     final limitMatch = RegExp(r'/ip hotspot user set \[find name=\$user\] limit-bytes-total=(\d+);').firstMatch(scriptContent);
     if (limitMatch != null) {
@@ -67,9 +71,11 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
         }
       }
     }
-    
+
+    // Strip the data-limit block from the displayed/edited script so it isn't
+    // duplicated when we re-append it below from the field values.
     String cleanScript = scriptContent.replaceAll(RegExp(r':delay 1s;\s*:local currentlimit \[/ip hotspot user get \[find name=\$user\] limit-bytes-total\];\s*:if \([^)]+\) do=\{\s*(?::log info \("Setting [^"]*" \. \$user\);\s*)?/ip hotspot user set \[find name=\$user\] limit-bytes-total=\d+;\s*/ip hotspot active remove \[find user=\$user\];\s*\}\s*'), '').trim();
-    
+
     // Remove auto-generated validity script for UI display
     cleanScript = cleanScript.replaceAll(RegExp(r'# --- Auto-Generated Validity Script ---[\s\S]*?# --- End Auto-Generated Validity Script ---\s*'), '').trim();
     
@@ -197,7 +203,10 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // Data Limit
+                        // Default Data Limit (profile-level). Acts as the
+                        // default for vouchers that don't set their own limit.
+                        // A per-voucher limit (set on the Generate screen) always
+                        // takes precedence and won't be overwritten by this.
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -211,7 +220,7 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
                                   color: dataLimitUnit != 'None' ? Colors.white : Colors.white24,
                                 ),
                                 decoration: InputDecoration(
-                                  labelText: 'Data Limit',
+                                  labelText: 'Default Data Limit',
                                   labelStyle: GoogleFonts.poppins(color: Colors.white60),
                                   hintText: dataLimitUnit == 'None' ? 'Unlimited' : 'Amount',
                                   hintStyle: GoogleFonts.poppins(color: Colors.white24),
@@ -353,6 +362,10 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
                                         finalOnLogin = '$validityScript\n$finalOnLogin'.trim();
                                       }
 
+                                      // Default data-limit script (profile-level). The guard uses
+                                      // `$currentlimit = 0` so it ONLY applies to vouchers that have
+                                      // no per-voucher limit yet — an explicit per-voucher limit set
+                                      // on the Generate screen is never overwritten here.
                                       if (dataLimitUnit != 'None' && dataLimitCtrl.text.trim().isNotEmpty) {
                                         final val = int.tryParse(dataLimitCtrl.text.trim()) ?? 0;
                                         if (val > 0) {
@@ -361,8 +374,8 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
                                           final scriptBlock = '''
 :delay 1s;
 :local currentlimit [/ip hotspot user get [find name=\$user] limit-bytes-total];
-:if (\$currentlimit != $bytes) do={
-    :log info ("Setting $val$dataLimitUnit limit and restarting session for: " . \$user);
+:if (\$currentlimit = 0) do={
+    :log info ("Applying default $val$dataLimitUnit limit for: " . \$user);
     /ip hotspot user set [find name=\$user] limit-bytes-total=$bytes;
     /ip hotspot active remove [find user=\$user];
 }''';

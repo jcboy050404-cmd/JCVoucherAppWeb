@@ -71,5 +71,11 @@
             <action android:name="android.intent.action.SENDTO"/>
             <data android:scheme="smsto"/>
         </intent>
+        <!-- Lets url_launcher resolve https://wa.me/... (WhatsApp) deep links
+             on Android 11+ (API 30+) package-visibility rules. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

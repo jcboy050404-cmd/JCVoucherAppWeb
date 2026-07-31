@@ -105,9 +105,20 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   @override
+  void didPushNext() {
+    // A child route (File Manager, Voucher list, etc.) was pushed on top of us.
+    // STOP the 2-second traffic poll: it shares the same MikrotikService socket
+    // as the child screen, and concurrent commands on one API stream corrupt
+    // each other (and _execute disconnects on any error, which would also kill
+    // the child's request). The timer resumes when we become active again.
+    _trafficTimer?.cancel();
+    _trafficTimer = null;
+  }
+
+  @override
   void didPopNext() {
-    // A child screen (Generate, Voucher list, etc.) was popped — refresh
-    // stats so newly created vouchers are reflected immediately.
+    // A child screen was popped — we're the active route again. Refresh stats
+    // so newly created vouchers are reflected, and resume traffic monitoring.
     _loadData();
   }
 
@@ -400,17 +411,54 @@ class _DashboardScreenState extends State<DashboardScreen>
         .fold(0.0, (sum, v) => sum + v.price);
   }
 
+  /// Sales from vouchers activated (or generated, falling back to the
+  /// creation date when there's no login tag) within the last 7 days.
+  double get _weeklySales {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return _vouchers.where((v) {
+      if (!v.isUsed && !v.isExpired) return false;
+      final act = v.activationDate;
+      if (act == null) return false;
+      return today.difference(act).inDays < 7 && !today.isBefore(act);
+    }).fold(0.0, (sum, v) => sum + v.price);
+  }
+
+  /// Revenue for each of the last [days] days (index 0 = oldest), for charting.
+  /// Uses the same activation-date basis as the other sales getters.
+  List<FlSpot> _dailyRevenueSpots({int days = 7}) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final buckets = List<double>.filled(days, 0.0);
+    for (final v in _vouchers) {
+      if (!v.isUsed && !v.isExpired) continue;
+      final act = v.activationDate;
+      if (act == null) continue;
+      final dayDiff = today.difference(act).inDays;
+      if (dayDiff < 0 || dayDiff >= days) continue;
+      buckets[days - 1 - dayDiff] += v.price;
+    }
+    return List<FlSpot>.generate(days, (i) => FlSpot(i.toDouble(), buckets[i]));
+  }
+
+  /// Day labels (Mon, Tue, …) for the last [days] days, oldest first.
+  List<String> _dayLabels({int days = 7}) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return List<String>.generate(days, (i) {
+      final d = today.subtract(Duration(days: days - 1 - i));
+      return names[d.weekday - 1];
+    });
+  }
+
+
 
   List<String> get _availableBatches {
     final set = <String>{'all'};
     for (final v in _vouchers) {
-      final bMatch = RegExp(r'Date:(\d{4}-\d{2}-\d{2})').firstMatch(v.comment);
-      if (bMatch != null) {
-        set.add(bMatch.group(1)!);
-      } else if (v.comment.isNotEmpty) {
-        final firstPart = v.comment.split('|').first.trim();
-        if (firstPart.isNotEmpty) set.add(firstPart);
-      }
+      final label = v.batchLabel;
+      if (label != 'No Batch') set.add(label);
     }
     return set.toList();
   }
@@ -423,11 +471,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (availableOnly && (v.isUsed || v.isExpired || v.disabled)) return false;
 
       if (batch != 'all') {
-        final bMatch = RegExp(r'Date:(\d{4}-\d{2}-\d{2})').firstMatch(v.comment);
-        final bLabel = bMatch != null
-            ? bMatch.group(1)!
-            : (v.comment.isNotEmpty ? v.comment.split('|').first.trim() : 'No Batch');
-        if (bLabel != batch) return false;
+        if (v.batchLabel != batch) return false;
       }
 
       return true;
@@ -1481,6 +1525,18 @@ class _DashboardScreenState extends State<DashboardScreen>
           borderRadius: BorderRadius.circular(12),
           onTap: onTap ?? () {
             setState(() => _desktopSelectedIndex = index);
+            // Only run the 2s traffic poll while the Dashboard tab is active.
+            // Other tabs (Files, Vouchers, etc.) share the same router socket;
+            // a concurrent poll would corrupt their API stream (and any error
+            // disconnects the whole session). Pause on leaving, resume on return.
+            if (index == 0) {
+              if (_trafficTimer == null && _monitoredInterface != null) {
+                _startTrafficMonitoring([_monitoredInterface!]);
+              }
+            } else {
+              _trafficTimer?.cancel();
+              _trafficTimer = null;
+            }
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1556,6 +1612,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                     _buildGlassCard(
                       child: _buildTrafficFlowCard(),
                       borderColor: const Color(0xFF00BFFF),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildGlassCard(
+                      child: _buildRevenueTrendCard(),
+                      borderColor: const Color(0xFF00E676),
                     ),
                   ],
                 ),
@@ -1782,6 +1843,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            Text('This Week', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 14)),
+            Text('₱${_weeklySales.toStringAsFixed(2)}', style: GoogleFonts.poppins(color: const Color(0xFFFFB74D), fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
             Text('This Month', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 14)),
             Text('₱${_monthlySales.toStringAsFixed(2)}', style: GoogleFonts.poppins(color: const Color(0xFF00BFFF), fontSize: 16, fontWeight: FontWeight.bold)),
           ],
@@ -1964,6 +2033,106 @@ class _DashboardScreenState extends State<DashboardScreen>
                   barWidth: 3,
                   isStrokeCapRound: true,
                   dotData: const FlDotData(show: false),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 7-day revenue trend (₱) — a static LineChart built from the current
+  /// voucher list, no live polling. Styled to match _buildTrafficFlowCard.
+  Widget _buildRevenueTrendCard() {
+    final spots = _dailyRevenueSpots(days: 7);
+    final labels = _dayLabels(days: 7);
+    final maxYVal = spots.isEmpty ? 0.0 : spots.map((s) => s.y).reduce(max);
+    final maxY = (maxYVal * 1.2).clamp(10.0, double.infinity);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Revenue (Last 7 Days)',
+                style: GoogleFonts.poppins(
+                    color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00E676).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text('₱${_weeklySales.toStringAsFixed(0)}',
+                  style: GoogleFonts.poppins(
+                      color: const Color(0xFF00E676),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 160,
+          child: LineChart(
+            LineChartData(
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (value) =>
+                    FlLine(color: Colors.white.withValues(alpha: 0.05), strokeWidth: 1),
+              ),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 44,
+                    getTitlesWidget: (value, meta) => Text('₱${value.toStringAsFixed(0)}',
+                        style: GoogleFonts.poppins(color: Colors.white54, fontSize: 10)),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 28,
+                    getTitlesWidget: (value, meta) {
+                      final i = value.round();
+                      if (i < 0 || i >= labels.length) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(labels[i],
+                            style: GoogleFonts.poppins(color: Colors.white54, fontSize: 10)),
+                      );
+                    },
+                  ),
+                ),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              ),
+              borderData: FlBorderData(show: false),
+              minY: 0,
+              maxY: maxY,
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: true,
+                  color: const Color(0xFF00E676),
+                  barWidth: 3,
+                  isStrokeCapRound: true,
+                  dotData: const FlDotData(show: false),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF00E676).withValues(alpha: 0.5),
+                        const Color(0xFF00E676).withValues(alpha: 0.05),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -2520,6 +2689,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                             subtitle: 'Daily sales',
                           ),
                           StatCard(
+                            title: 'Weekly Income',
+                            value: '₱${_weeklySales.toStringAsFixed(0)}',
+                            icon: Icons.view_week_rounded,
+                            color: const Color(0xFFFFB74D),
+                            subtitle: 'Last 7 days sales',
+                          ),
+                          StatCard(
                             title: 'Monthly Income',
                             value: '₱${_monthlySales.toStringAsFixed(0)}',
                             icon: Icons.calendar_month_rounded,
@@ -2534,6 +2710,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                             subtitle: 'All active sales',
                           ),
                         ]),
+                      ),
+
+                      // ── Revenue Trend (7-day) chart ────────────────────────
+                      _SectionCard(
+                        title: 'Revenue Trend',
+                        icon: Icons.show_chart_rounded,
+                        accentColor: const Color(0xFF00E676),
+                        child: _buildRevenueTrendCard(),
                       ),
 
                       // ── Voucher Overview Background Section ────────────────

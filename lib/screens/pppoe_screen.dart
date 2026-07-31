@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/mikrotik_service.dart';
 import '../services/pppoe_billing_service.dart';
 import '../services/auto_sms_service.dart';
@@ -217,6 +218,20 @@ class _PppoeScreenState extends State<PppoeScreen>
   }
 
 
+  /// Normalizes a PH mobile number to the international form WhatsApp's
+  /// wa.me/<number> requires: digits only, no leading '+', no leading '0'.
+  /// `09XXXXXXXXX` → `639XXXXXXXXX`; `+639XXXXXXXXX` → `639XXXXXXXXX`.
+  /// Returns null if [raw] is null/empty/not a valid PH mobile.
+  String? _normalizePhoneForWa(String? raw) {
+    if (raw == null) return null;
+    var s = raw.replaceAll(RegExp(r'[^\d+]'), '');
+    if (s.startsWith('+')) s = s.substring(1);
+    if (s.startsWith('09')) s = '639${s.substring(2)}';
+    // Valid PH international mobile: '63' + 10 digits (9XXXXXXXXX) = 12 digits.
+    if (s.length == 12 && s.startsWith('639')) return s;
+    return null;
+  }
+
   Future<void> _launchSms(String text) async {
     final Uri uri = Uri.parse("sms:?body=${Uri.encodeComponent(text)}");
     try {
@@ -230,14 +245,27 @@ class _PppoeScreenState extends State<PppoeScreen>
     }
   }
 
-  Future<void> _launchWhatsApp(String text) async {
-    final Uri uri = Uri.parse("https://wa.me/?text=${Uri.encodeComponent(text)}");
+  /// Opens a pre-filled WhatsApp chat to [phone] (if a valid number can be
+  /// extracted via [_normalizePhoneForWa]); otherwise falls back to the WhatsApp
+  /// chat picker so the operator can choose a contact manually.
+  Future<void> _launchWhatsApp(String text, {String? phone}) async {
+    final intl = _normalizePhoneForWa(phone);
+    final base = intl == null ? 'https://wa.me/?' : 'https://wa.me/$intl?';
+    final Uri uri = Uri.parse('${base}text=${Uri.encodeComponent(text)}');
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        await Clipboard.setData(ClipboardData(text: text));
-      }
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: text));
+    }
+  }
+
+  /// Opens the OS share sheet so the operator can pick Messenger, Viber, SMS,
+  /// or any installed app to send the reminder. Works even when we don't have
+  /// (and can't use) the recipient's number for a deep link — e.g. Messenger,
+  /// which keys on a Facebook username, not a phone number.
+  Future<void> _launchShareReminder(String text) async {
+    try {
+      await Share.share(text, subject: 'PPPoE Payment Reminder');
     } catch (_) {
       await Clipboard.setData(ClipboardData(text: text));
     }
@@ -288,10 +316,18 @@ class _PppoeScreenState extends State<PppoeScreen>
           ),
           IconButton(
             icon: const Icon(Icons.chat_bubble_rounded, color: Color(0xFF25D366)),
-            tooltip: 'Send via WhatsApp',
+            tooltip: 'Send via WhatsApp${user.phoneNumber != null ? " (to ${user.phoneNumber})" : ""}',
             onPressed: () {
               Navigator.pop(ctx);
-              _launchWhatsApp(text);
+              _launchWhatsApp(text, phone: user.phoneNumber);
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.share_rounded, color: Color(0xFF0084FF)),
+            tooltip: 'Share via Messenger / Viber / other apps',
+            onPressed: () {
+              Navigator.pop(ctx);
+              _launchShareReminder(text);
             },
           ),
           TextButton(

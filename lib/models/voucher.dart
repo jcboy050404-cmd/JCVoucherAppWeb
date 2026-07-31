@@ -109,6 +109,32 @@ class Voucher {
 
   String get displayCode => name.toUpperCase();
 
+  String get batchLabel {
+    // 1. If there's a custom comment (indicated by | separator), use it
+    if (comment.contains('|')) {
+      String custom = comment.split('|').first.trim();
+      if (custom.startsWith('vc-')) custom = custom.substring(3).trim();
+      if (custom.startsWith('up-')) custom = custom.substring(3).trim();
+      if (custom.isNotEmpty) return custom;
+    }
+    
+    // 2. Fallback to Date: if no explicit custom comment
+    final bMatch = RegExp(r'Date:(\d{4}-\d{2}-\d{2})').firstMatch(comment);
+    if (bMatch != null) {
+      return bMatch.group(1)!;
+    }
+    
+    // 3. Fallback to first part of comment
+    if (comment.isNotEmpty) {
+      String fallback = comment.split('|').first.trim();
+      if (fallback.startsWith('vc-')) fallback = fallback.substring(3).trim();
+      if (fallback.startsWith('up-')) fallback = fallback.substring(3).trim();
+      if (fallback.isNotEmpty) return fallback;
+    }
+    
+    return 'No Batch';
+  }
+
   String get customerName {
     final match = RegExp(r'cname:(.*?)(?=\s+[a-zA-Z0-9]+:|$)').firstMatch(comment);
     if (match != null) {

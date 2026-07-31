@@ -68,15 +68,9 @@ class _VoucherListScreenState extends State<VoucherListScreen>
 
   void _rebuildCaches() {
     final batches = <String>{'all'};
-    final batchRe = RegExp(r'Date:(\d{4}-\d{2}-\d{2})');
     for (final v in _all) {
-      final bMatch = batchRe.firstMatch(v.comment);
-      if (bMatch != null) {
-        batches.add(bMatch.group(1)!);
-      } else if (v.comment.isNotEmpty) {
-        final firstPart = v.comment.split('|').first.trim();
-        if (firstPart.isNotEmpty) batches.add(firstPart);
-      }
+      final label = v.batchLabel;
+      if (label != 'No Batch') batches.add(label);
     }
     _cachedBatches = batches.toList();
 
@@ -101,11 +95,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
       if (availableOnly && (v.isUsed || v.disabled)) return false;
 
       if (batch != 'all') {
-        final bMatch = RegExp(r'Date:(\d{4}-\d{2}-\d{2})').firstMatch(v.comment);
-        final bLabel = bMatch != null
-            ? bMatch.group(1)!
-            : (v.comment.isNotEmpty ? v.comment.split('|').first.trim() : 'No Batch');
-        if (bLabel != batch) return false;
+        if (v.batchLabel != batch) return false;
       }
 
       return true;
@@ -252,14 +242,7 @@ class _VoucherListScreenState extends State<VoucherListScreen>
         _ => true,
       };
 
-      final matchBatch = () {
-        if (_filterBatch == 'all') return true;
-        final bMatch = RegExp(r'Date:(\d{4}-\d{2}-\d{2})').firstMatch(v.comment);
-        final bLabel = bMatch != null
-            ? bMatch.group(1)!
-            : (v.comment.isNotEmpty ? v.comment.split('|').first.trim() : 'No Batch');
-        return bLabel == _filterBatch;
-      }();
+      final matchBatch = _filterBatch == 'all' || v.batchLabel == _filterBatch;
 
       return matchSearch && matchStatus && matchBatch;
     }).toList();
