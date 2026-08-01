@@ -1398,62 +1398,108 @@ class _DashboardScreenState extends State<DashboardScreen>
                               ),
                               child: Row(
                                 children: [
-                                  // Profile avatar with mode-specific border ring
-                                  Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      gradient: LinearGradient(
-                                        colors: isAdmin
-                                            ? [const Color(0xFF9C27B0), const Color(0xFFCE93D8)]
-                                            : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
-                                                ? [const Color(0xFFFFB300), const Color(0xFFFFD54F)] // Gold — PRO lifetime
-                                                : _isPro
-                                                    ? [const Color(0xFF1976D2), const Color(0xFF42A5F5)] // Blue — PRO Monthly
-                                                    : [const Color(0xFFFF9800), const Color(0xFFFFCC80)], // Amber — Trial
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: (isAdmin
-                                              ? const Color(0xFF9C27B0)
-                                              : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
-                                                  ? const Color(0xFFFFB300)
-                                                  : _isPro
-                                                      ? const Color(0xFF1976D2)
-                                                      : const Color(0xFFFF9800)).withValues(alpha: 0.4),
-                                          blurRadius: 6,
-                                          spreadRadius: 0,
+                                  // Profile avatar with mode-specific gradient ring + badge
+                                  Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: LinearGradient(
+                                            colors: isAdmin
+                                                ? [const Color(0xFF9C27B0), const Color(0xFFCE93D8)]
+                                                : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
+                                                    ? [const Color(0xFFFFB300), const Color(0xFFFFD54F)]
+                                                    : _isPro
+                                                        ? [const Color(0xFF1976D2), const Color(0xFF42A5F5)]
+                                                        : [const Color(0xFFFF9800), const Color(0xFFFFCC80)],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: (isAdmin
+                                                  ? const Color(0xFF9C27B0)
+                                                  : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
+                                                      ? const Color(0xFFFFB300)
+                                                      : _isPro
+                                                          ? const Color(0xFF1976D2)
+                                                          : const Color(0xFFFF9800)).withValues(alpha: 0.45),
+                                              blurRadius: 8,
+                                              spreadRadius: 1,
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
-                                    child: CircleAvatar(
-                                      radius: 15,
-                                      backgroundColor: isAdmin
-                                          ? const Color(0xFF9C27B0).withValues(alpha: 0.25)
-                                          : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
-                                              ? const Color(0xFFFFB300).withValues(alpha: 0.25)
-                                              : _isPro
-                                                  ? const Color(0xFF1976D2).withValues(alpha: 0.25)
-                                                  : const Color(0xFFFF9800).withValues(alpha: 0.25),
-                                      child: Text(
-                                        (currentUser?.displayName ?? 'V').isNotEmpty
-                                            ? (currentUser?.displayName ?? 'V').substring(0, 1).toUpperCase()
-                                            : 'V',
-                                        style: GoogleFonts.poppins(
-                                          color: isAdmin
-                                              ? const Color(0xFFCE93D8)
+                                        child: CircleAvatar(
+                                          radius: 15,
+                                          backgroundColor: isAdmin
+                                              ? const Color(0xFF9C27B0).withValues(alpha: 0.25)
                                               : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
-                                                  ? const Color(0xFFFFD54F)
+                                                  ? const Color(0xFFFFB300).withValues(alpha: 0.25)
                                                   : _isPro
-                                                      ? const Color(0xFF42A5F5)
-                                                      : const Color(0xFFFFCC80),
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
+                                                      ? const Color(0xFF1976D2).withValues(alpha: 0.25)
+                                                      : const Color(0xFFFF9800).withValues(alpha: 0.25),
+                                          child: Text(
+                                            (currentUser?.displayName ?? 'V').isNotEmpty
+                                                ? (currentUser?.displayName ?? 'V').substring(0, 1).toUpperCase()
+                                                : 'V',
+                                            style: GoogleFonts.poppins(
+                                              color: isAdmin
+                                                  ? const Color(0xFFCE93D8)
+                                                  : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
+                                                      ? const Color(0xFFFFD54F)
+                                                      : _isPro
+                                                          ? const Color(0xFF42A5F5)
+                                                          : const Color(0xFFFFCC80),
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                    ),
+                                      // Floating badge — bottom-right of ring
+                                      Positioned(
+                                        bottom: -2,
+                                        right: -2,
+                                        child: Container(
+                                          width: 16,
+                                          height: 16,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: isAdmin
+                                                ? const Color(0xFF9C27B0)
+                                                : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
+                                                    ? const Color(0xFFFFB300)
+                                                    : _isPro
+                                                        ? const Color(0xFF1976D2)
+                                                        : const Color(0xFF1A1A2E),
+                                            border: Border.all(
+                                              color: const Color(0xFF1A1A2E),
+                                              width: 1.5,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withValues(alpha: 0.4),
+                                                blurRadius: 4,
+                                              ),
+                                            ],
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              isAdmin
+                                                  ? '🛡'
+                                                  : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
+                                                      ? '👑'
+                                                      : _isPro
+                                                          ? '⚡'
+                                                          : '🔒',
+                                              style: const TextStyle(fontSize: 8),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -2475,73 +2521,120 @@ class _DashboardScreenState extends State<DashboardScreen>
                   padding: const EdgeInsets.fromLTRB(24, 20, 8, 0),
                   child: Row(
                     children: [
-                      // Mode-aware profile ring — Trial=Amber, PRO Monthly=Blue, PRO=Gold, Admin=Purple
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: currentUser?.isAdmin == true
-                                ? [const Color(0xFF9C27B0), const Color(0xFFCE93D8)]
-                                : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
-                                    ? [const Color(0xFFFFB300), const Color(0xFFFFD54F)] // Gold — PRO lifetime
-                                    : _isPro
-                                        ? [const Color(0xFF1976D2), const Color(0xFF42A5F5)] // Blue — PRO Monthly
-                                        : [const Color(0xFFFF9800), const Color(0xFFFFCC80)], // Amber — Trial
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: (currentUser?.isAdmin == true
-                                  ? const Color(0xFF9C27B0)
-                                  : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
-                                      ? const Color(0xFFFFB300)
-                                      : _isPro
-                                          ? const Color(0xFF1976D2)
-                                          : const Color(0xFFFF9800)).withValues(alpha: 0.45),
-                              blurRadius: 12,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                        child: currentUser?.photoUrl != null
-                          ? CircleAvatar(
-                              radius: 18,
-                              backgroundImage: NetworkImage(currentUser!.photoUrl!),
-                            )
-                          : Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: currentUser?.isAdmin == true
-                                    ? const Color(0xFF9C27B0).withValues(alpha: 0.25)
+                      // Mode-aware profile ring + floating badge
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: currentUser?.isAdmin == true
+                                    ? [const Color(0xFF9C27B0), const Color(0xFFCE93D8)]
                                     : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
-                                        ? const Color(0xFFFFB300).withValues(alpha: 0.25)
+                                        ? [const Color(0xFFFFB300), const Color(0xFFFFD54F)]
                                         : _isPro
-                                            ? const Color(0xFF1976D2).withValues(alpha: 0.25)
-                                            : const Color(0xFFFF9800).withValues(alpha: 0.25),
+                                            ? [const Color(0xFF1976D2), const Color(0xFF42A5F5)]
+                                            : [const Color(0xFFFF9800), const Color(0xFFFFCC80)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (currentUser?.isAdmin == true
+                                      ? const Color(0xFF9C27B0)
+                                      : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
+                                          ? const Color(0xFFFFB300)
+                                          : _isPro
+                                              ? const Color(0xFF1976D2)
+                                              : const Color(0xFFFF9800)).withValues(alpha: 0.45),
+                                  blurRadius: 12,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: currentUser?.photoUrl != null
+                              ? CircleAvatar(
+                                  radius: 18,
+                                  backgroundImage: NetworkImage(currentUser!.photoUrl!),
+                                )
+                              : Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: currentUser?.isAdmin == true
+                                        ? const Color(0xFF9C27B0).withValues(alpha: 0.25)
+                                        : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
+                                            ? const Color(0xFFFFB300).withValues(alpha: 0.25)
+                                            : _isPro
+                                                ? const Color(0xFF1976D2).withValues(alpha: 0.25)
+                                                : const Color(0xFFFF9800).withValues(alpha: 0.25),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      currentUser?.displayName.isNotEmpty == true
+                                          ? currentUser!.displayName[0].toUpperCase()
+                                          : 'V',
+                                      style: GoogleFonts.poppins(
+                                        color: currentUser?.isAdmin == true
+                                            ? const Color(0xFFCE93D8)
+                                            : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
+                                                ? const Color(0xFFFFD54F)
+                                                : _isPro
+                                                    ? const Color(0xFF42A5F5)
+                                                    : const Color(0xFFFFCC80),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                          ),
+                          // Floating badge — bottom-right of ring
+                          Positioned(
+                            bottom: -3,
+                            right: -3,
+                            child: Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
                                 shape: BoxShape.circle,
+                                color: currentUser?.isAdmin == true
+                                    ? const Color(0xFF9C27B0)
+                                    : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
+                                        ? const Color(0xFFFFB300)
+                                        : _isPro
+                                            ? const Color(0xFF1976D2)
+                                            : const Color(0xFF1A1A2E),
+                                border: Border.all(
+                                  color: const Color(0xFF0D0D1A),
+                                  width: 1.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    blurRadius: 6,
+                                    spreadRadius: 0,
+                                  ),
+                                ],
                               ),
                               child: Center(
                                 child: Text(
-                                  currentUser?.displayName.isNotEmpty == true
-                                      ? currentUser!.displayName[0].toUpperCase()
-                                      : 'V',
-                                  style: GoogleFonts.poppins(
-                                    color: currentUser?.isAdmin == true
-                                        ? const Color(0xFFCE93D8)
-                                        : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
-                                            ? const Color(0xFFFFD54F)
-                                            : _isPro
-                                                ? const Color(0xFF42A5F5)
-                                                : const Color(0xFFFFCC80),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
+                                  currentUser?.isAdmin == true
+                                      ? '🛡'
+                                      : (_isPro && (_proExpiresAt == null || _proExpiresAt!.isEmpty))
+                                          ? '👑'
+                                          : _isPro
+                                              ? '⚡'
+                                              : '🔒',
+                                  style: const TextStyle(fontSize: 10),
                                 ),
                               ),
                             ),
+                          ),
+                        ],
                       ),
                       const SizedBox(width: 12),
                       Expanded(
