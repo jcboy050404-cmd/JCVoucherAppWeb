@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import '../widgets/top_toast.dart';
 import 'package:flutter/material.dart';
@@ -390,7 +391,8 @@ class _AdminScreenState extends State<AdminScreen> {
     if (mounted) setState(() => _isLoadingUsers = true);
     try {
       if (type == 'trial') {
-        await CloudSyncService.saveUserState(email, pro: false, proExpiresAt: '');
+        await TrialService.resetTrial(email);
+        await CloudSyncService.saveUserState(email, pro: false, proExpiresAt: '', trialUsed: false);
       } else if (type == 'trial_reset') {
         await TrialService.resetTrial(email);
         await CloudSyncService.saveUserState(email, pro: false, proExpiresAt: '');
