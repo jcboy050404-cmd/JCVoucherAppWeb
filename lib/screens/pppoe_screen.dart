@@ -427,8 +427,12 @@ class _PppoeScreenState extends State<PppoeScreen>
     // If the feature is enabled but the permission was later revoked in system
     // Settings, we must reflect that so the toggle and test button behave
     // correctly (and show the "Open Settings" path).
+    // Only CHECK the current status — never request here. The system dialog
+    // must only appear when the user explicitly taps the toggle ON or "Grant".
+    // Requesting on modal open caused unexpected Android dialogs that users
+    // denied (sometimes permanently) before they understood the feature.
     bool hasPermission = Platform.isAndroid
-        ? await AutoSmsService.requestPermission()
+        ? (await Permission.sms.status).isGranted
         : false;
 
     final tplCtrl = TextEditingController(text: template);
