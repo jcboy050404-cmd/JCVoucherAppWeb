@@ -630,32 +630,52 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                     const SizedBox(height: 14),
 
-                    // Switch Available Only
-                    SwitchListTile(
-                      value: availableOnly,
-                      onChanged: (val) {
-                        setModalState(() => availableOnly = val);
-                      },
-                      title: Text(
-                        'Available Vouchers Only',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
+                    // Custom Toggle Button for Available Only
+                    GestureDetector(
+                      onTap: () => setModalState(() => availableOnly = !availableOnly),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: availableOnly ? const Color(0xFF00BFFF).withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: availableOnly ? const Color(0xFF00BFFF) : Colors.white12,
+                            width: 1.5,
+                          ),
                         ),
-                      ),
-                      subtitle: Text(
-                        'Exclude used or expired vouchers',
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: Colors.white38,
+                        child: Row(
+                          children: [
+                            Icon(
+                              availableOnly ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                              color: availableOnly ? const Color(0xFF00BFFF) : Colors.white54,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Available Vouchers Only',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: availableOnly ? Colors.white : Colors.white70,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Exclude used or expired vouchers',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 11,
+                                      color: availableOnly ? Colors.white70 : Colors.white38,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      contentPadding: EdgeInsets.zero,
-                      thumbColor: WidgetStateProperty.resolveWith<Color?>(
-                        (states) => states.contains(WidgetState.selected)
-                            ? const Color(0xFF00BFFF)
-                            : null,
                       ),
                     ),
 
@@ -1709,32 +1729,48 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _buildProModeBannerContent() {
     return Container(
+      padding: const EdgeInsets.all(1.5),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFFFB300), Color(0xFFFFD54F)], // Gold theme
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [Color(0xFFFFD700), Color(0xFFFFA000), Color(0xFFFF6F00)], // Premium Gold gradient
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFB300).withValues(alpha: 0.3), // Gold shadow
-            blurRadius: 10, offset: const Offset(0, 4),
+            color: const Color(0xFFFFD700).withValues(alpha: 0.25),
+            blurRadius: 12, offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF140D22), // Deep premium dark background
+          borderRadius: BorderRadius.circular(19),
+        ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFFD700).withValues(alpha: 0.4),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
               ),
               child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 24),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1742,18 +1778,30 @@ class _DashboardScreenState extends State<DashboardScreen>
                   Text(
                     'PRO Monthly Active',
                     style: GoogleFonts.poppins(
-                      fontSize: 13.5,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      color: const Color(0xFFFFD700), // Gold text
+                      letterSpacing: 0.3,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Valid until ${_formatExpDate(_proExpiresAt!)}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      color: Colors.white54,
-                    ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.verified_rounded, color: Color(0xFF00C853), size: 14),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Valid until ${_formatExpDate(_proExpiresAt!)}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

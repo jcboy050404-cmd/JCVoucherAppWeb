@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:voucherapps/models/router_profile.dart';
@@ -88,23 +89,28 @@ class _VendoMonitorCardState extends State<VendoMonitorCard> {
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF18182A),
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: badgeColor.withValues(alpha: 0.3),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: badgeColor.withValues(alpha: 0.1),
-            blurRadius: 15,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.03), // Frosty low-opacity tint
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: badgeColor.withValues(alpha: 0.15), // Very subtle colored edge
+                width: 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: badgeColor.withValues(alpha: 0.05),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -255,6 +261,9 @@ class _VendoMonitorCardState extends State<VendoMonitorCard> {
             ],
           ),
         ],
+      ),
+          ),
+        ),
       ),
     );
   }

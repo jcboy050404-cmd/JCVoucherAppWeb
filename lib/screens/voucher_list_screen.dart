@@ -1113,32 +1113,52 @@ class _VoucherListScreenState extends State<VoucherListScreen>
                       ),
                       const SizedBox(height: 14),
 
-                      // Switch Available Only
-                      SwitchListTile(
-                        value: availableOnly,
-                        onChanged: (val) {
-                          setModalState(() => availableOnly = val);
-                        },
-                        title: Text(
-                          'Available Vouchers Only',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
+                      // Custom Toggle Button for Available Only
+                      GestureDetector(
+                        onTap: () => setModalState(() => availableOnly = !availableOnly),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: availableOnly ? const Color(0xFF00BFFF).withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: availableOnly ? const Color(0xFF00BFFF) : Colors.white12,
+                              width: 1.5,
+                            ),
                           ),
-                        ),
-                        subtitle: Text(
-                          'Exclude used or expired vouchers',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: Colors.white38,
+                          child: Row(
+                            children: [
+                              Icon(
+                                availableOnly ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                color: availableOnly ? const Color(0xFF00BFFF) : Colors.white54,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Available Vouchers Only',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: availableOnly ? Colors.white : Colors.white70,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Exclude used or expired vouchers',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 11,
+                                        color: availableOnly ? Colors.white70 : Colors.white38,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        contentPadding: EdgeInsets.zero,
-                        thumbColor: WidgetStateProperty.resolveWith<Color?>(
-                          (states) => states.contains(WidgetState.selected)
-                              ? const Color(0xFF00BFFF)
-                              : null,
                         ),
                       ),
                     ],
