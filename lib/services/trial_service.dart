@@ -23,6 +23,9 @@ class TrialService {
   static const String _proPrefix = 'pro_unlocked_';
   static const String _proExpiresPrefix = 'pro_expires_';
   static const String _legacyGlobalProKey = 'is_app_pro_unlocked';
+  // Persisted cache key prefix for the last cloud-verified device-limit verdict.
+  // Keyed by "email_routerRawId" so offline sessions reflect the last known result.
+  static const String _deviceVerdictPrefix = 'device_verdict_';
 
   /// Per-session device-limit verdict: once a router is denied a slot on this
   /// device, PRO is withheld for the rest of the session (until reconnect).
@@ -125,7 +128,7 @@ class TrialService {
   static Future<bool> _isDeviceAllowed(String email, MikrotikService? service) async {
     if (service == null || !service.isConnected) return true;
 
-    // Reuse the cached verdict if it's for the same email (set on first call).
+    // Reuse the in-process cached verdict if it's for the same email.
     if (_deviceDeniedEmail == email) {
       return _deviceDeniedForSession != true;
     }
@@ -140,7 +143,20 @@ class TrialService {
           : '${board}_${sysRes['platform'] ?? ''}_${sysRes['cpu'] ?? ''}';
 
       final result = await checkAndRegisterRouter(email, routerRawId, board);
-      denied = result == DeviceSlotResult.denied;
+
+      if (result == DeviceSlotResult.offline) {
+        // Cloud was unreachable. Use the last-known persisted verdict so a
+        // previously-denied router cannot bypass the limit by going offline.
+        // A router with no cached verdict (genuine first offline login) still
+        // fails open — same behaviour as before.
+        final cachedDenied = await _getCachedDeviceVerdict(email, routerRawId);
+        denied = cachedDenied ?? false;
+        debugPrint('TrialService: offline — using cached device verdict: denied=$denied');
+      } else {
+        denied = result == DeviceSlotResult.denied;
+        // Persist the cloud-verified verdict for future offline sessions.
+        await _cacheDeviceVerdict(email, routerRawId, denied);
+      }
     } catch (e) {
       debugPrint('TrialService: device-limit check failed, fail-open ($e)');
       denied = false;
@@ -162,6 +178,38 @@ class TrialService {
   static void clearDeviceVerdict() {
     _deviceDeniedForSession = null;
     _deviceDeniedEmail = null;
+    // Note: the persisted SharedPreferences verdict is intentionally NOT cleared
+    // here. It must survive logout so that an offline re-login for a denied
+    // router is still denied. The cache is refreshed on the next successful
+    // cloud check.
+  }
+
+  /// Persists the cloud-verified device-limit verdict to SharedPreferences.
+  /// Keyed by [email] + [routerRawId] so each (account, router) pair is
+  /// tracked independently.
+  static Future<void> _cacheDeviceVerdict(
+    String email,
+    String routerRawId,
+    bool denied,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('$_deviceVerdictPrefix${email}_$routerRawId', denied);
+    } catch (_) {}
+  }
+
+  /// Returns the last cloud-verified verdict for [email] + [routerRawId], or
+  /// null if no verdict has been cached yet (first-time router, no history).
+  static Future<bool?> _getCachedDeviceVerdict(
+    String email,
+    String routerRawId,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('$_deviceVerdictPrefix${email}_$routerRawId');
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Returns the Pro expiration date string if it exists, otherwise null

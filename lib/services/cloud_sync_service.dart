@@ -287,45 +287,92 @@ class CloudSyncService {
   ) async {
     if (email.isEmpty || routerIdHash.isEmpty) return 'error';
     final key = _cleanEmail(email);
-    final baseRouterUrl = '$_baseUrl/$key/registered_routers';
+    final registeredRoutersUrl = '$_baseUrl/$key/registered_routers';
 
-    try {
-      // 1. Fetch current registrations
-      final existing = await getRegisteredRouters(email);
+    // ── Atomic compare-and-swap with ETag (fixes TOCTOU race condition) ──────
+    // Using Firebase's conditional write (X-Firebase-ETag + if-match) so that
+    // if two phones on the same account try to register simultaneously, only
+    // ONE succeeds — the other gets HTTP 412 and retries with fresh data.
+    const maxRetries = 3;
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Step 1: GET the full registered_routers node with an ETag.
+        // X-Firebase-ETag: true tells Firebase to include a strong ETag in the
+        // response header that uniquely identifies the current state of the node.
+        final getUrl = Uri.parse(_auth('$registeredRoutersUrl.json'));
+        final getResponse = await http.get(
+          getUrl,
+          headers: {'X-Firebase-ETag': 'true'},
+        ).timeout(const Duration(seconds: 5));
 
-      // 2. Already registered → allow immediately
-      if (existing.containsKey(routerIdHash)) {
-        debugPrint('CloudSyncService: Router $routerIdHash already registered for $email');
-        return 'allowed';
+        if (getResponse.statusCode != 200) return 'error';
+
+        // Firebase returns a quoted ETag e.g. "abc123" — keep as-is for if-match.
+        final etag = getResponse.headers['etag'] ?? '';
+
+        Map<String, dynamic> existing = {};
+        if (getResponse.body != 'null') {
+          final data = json.decode(getResponse.body);
+          if (data is Map) existing = Map<String, dynamic>.from(data);
+        }
+
+        // Step 2: Already registered → allow immediately (no write needed).
+        if (existing.containsKey(routerIdHash)) {
+          debugPrint('CloudSyncService: Router $routerIdHash already registered for $email');
+          return 'allowed';
+        }
+
+        // Step 3: Slots full → deny.
+        final limit = await getMaxRoutersForEmail(email);
+        if (existing.length >= limit) {
+          debugPrint('CloudSyncService: Device limit reached for $email (${existing.length}/$limit)');
+          return 'denied';
+        }
+
+        // Step 4: Atomic PUT — write the full updated node with the new entry.
+        // Firebase rejects with 412 if the node was modified since our GET,
+        // protecting against concurrent registrations bypassing the limit.
+        final updatedRouters = Map<String, dynamic>.from(existing)
+          ..[routerIdHash] = {
+            'label': label.isNotEmpty ? label : 'MikroTik Router',
+            'registered_at': DateTime.now().toIso8601String(),
+          };
+
+        final putUrl = Uri.parse(_auth('$registeredRoutersUrl.json'));
+        final putResponse = await http.put(
+          putUrl,
+          headers: {
+            'Content-Type': 'application/json',
+            if (etag.isNotEmpty) 'if-match': etag,
+          },
+          body: json.encode(updatedRouters),
+        ).timeout(const Duration(seconds: 5));
+
+        if (putResponse.statusCode == 200) {
+          debugPrint('CloudSyncService: Registered router $routerIdHash for $email (attempt ${attempt + 1})');
+          return 'registered';
+        }
+
+        if (putResponse.statusCode == 412) {
+          // Another device modified the node between our GET and PUT.
+          // Back off briefly and retry with freshly fetched data.
+          debugPrint('CloudSyncService: ETag mismatch on attempt ${attempt + 1} for $email — retrying…');
+          await Future.delayed(Duration(milliseconds: 120 * (attempt + 1)));
+          continue;
+        }
+
+        debugPrint('CloudSyncService: registerRouter HTTP ${putResponse.statusCode}');
+        return 'error';
+      } catch (e) {
+        debugPrint('CloudSyncService: registerRouter error ($e)');
+        return 'error';
       }
-
-      // 3. Slots full → deny. Check specific custom limit, then global limit.
-      final limit = await getMaxRoutersForEmail(email);
-      if (existing.length >= limit) {
-        debugPrint('CloudSyncService: Device limit reached for $email (${existing.length}/$limit)');
-        return 'denied';
-      }
-
-      // 4. Register the new router
-      final url = Uri.parse(_auth('$baseRouterUrl/$routerIdHash.json'));
-      final payload = {
-        'label': label.isNotEmpty ? label : 'MikroTik Router',
-        'registered_at': DateTime.now().toIso8601String(),
-      };
-      final response = await http.put(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(payload),
-      ).timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == 200) {
-        debugPrint('CloudSyncService: Registered router $routerIdHash for $email');
-        return 'registered';
-      }
-    } catch (e) {
-      debugPrint('CloudSyncService: registerRouter error ($e)');
     }
-    return 'error';
+
+    // All retries exhausted — means ≥3 near-simultaneous registrations for the
+    // same account. Deny rather than silently exceed the device limit.
+    debugPrint('CloudSyncService: registerRouter: all retries exhausted for $email — denying');
+    return 'denied';
   }
 
   /// Removes a registered router entry for [email] (admin utility).
