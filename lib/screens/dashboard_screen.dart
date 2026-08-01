@@ -1400,10 +1400,23 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 children: [
                                   CircleAvatar(
                                     radius: 16,
-                                    backgroundColor: const Color(0xFF00C853).withValues(alpha: 0.2),
+                                    backgroundColor: isAdmin 
+                                        ? const Color(0xFF9C27B0).withValues(alpha: 0.2)
+                                        : _isPro 
+                                            ? const Color(0xFF00C853).withValues(alpha: 0.2)
+                                            : const Color(0xFFFF9800).withValues(alpha: 0.2),
                                     child: Text(
-                                      (currentUser?.displayName ?? 'A').substring(0, 1).toUpperCase(),
-                                      style: GoogleFonts.poppins(color: const Color(0xFF00C853), fontWeight: FontWeight.bold, fontSize: 14),
+                                      (currentUser?.displayName ?? 'V').isNotEmpty 
+                                          ? (currentUser?.displayName ?? 'V').substring(0, 1).toUpperCase() 
+                                          : 'V',
+                                      style: GoogleFonts.poppins(
+                                          color: isAdmin 
+                                              ? const Color(0xFFE1BEE7)
+                                              : _isPro 
+                                                  ? const Color(0xFF00C853)
+                                                  : const Color(0xFFFFB74D), 
+                                          fontWeight: FontWeight.bold, 
+                                          fontSize: 14),
                                     ),
                                   ),
                                   const SizedBox(width: 12),
@@ -1413,16 +1426,44 @@ class _DashboardScreenState extends State<DashboardScreen>
                                       children: [
                                         Row(
                                           children: [
-                                            Text('Admin', style: GoogleFonts.poppins(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                                            Flexible(
+                                              child: Text(
+                                                currentUser?.displayName ?? 'VoucherApp', 
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: GoogleFonts.poppins(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)
+                                              ),
+                                            ),
                                             const SizedBox(width: 6),
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                               decoration: BoxDecoration(
-                                                color: const Color(0xFF00C853).withValues(alpha: 0.2),
+                                                color: isAdmin 
+                                                    ? const Color(0xFF9C27B0).withValues(alpha: 0.2)
+                                                    : _isPro 
+                                                        ? const Color(0xFF00C853).withValues(alpha: 0.2)
+                                                        : const Color(0xFFFF9800).withValues(alpha: 0.2),
                                                 borderRadius: BorderRadius.circular(6),
-                                                border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.5)),
+                                                border: Border.all(
+                                                  color: isAdmin 
+                                                      ? const Color(0xFF9C27B0).withValues(alpha: 0.5)
+                                                      : _isPro 
+                                                          ? const Color(0xFF00C853).withValues(alpha: 0.5)
+                                                          : const Color(0xFFFF9800).withValues(alpha: 0.5)
+                                                ),
                                               ),
-                                              child: Text('PRO ⚡', style: GoogleFonts.poppins(color: const Color(0xFF00C853), fontSize: 9, fontWeight: FontWeight.bold)),
+                                              child: Text(
+                                                isAdmin ? 'ADMIN' : (_isPro ? 'PRO ⚡' : 'TRIAL'), 
+                                                style: GoogleFonts.poppins(
+                                                  color: isAdmin 
+                                                      ? const Color(0xFFE1BEE7)
+                                                      : _isPro 
+                                                          ? const Color(0xFF00C853)
+                                                          : const Color(0xFFFFB74D), 
+                                                  fontSize: 9, 
+                                                  fontWeight: FontWeight.bold
+                                                )
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -1584,12 +1625,174 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  Widget _buildProModeBannerContent() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF00C853), Color(0xFF64DD17)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF00C853).withValues(alpha: 0.3),
+            blurRadius: 10, offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'PRO Monthly Active',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Valid until ${_formatExpDate(_proExpiresAt!)}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: Colors.white54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrialModeBannerContent() {
+    return GestureDetector(
+      onTap: () async {
+        final upgraded = await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const UpgradeScreen()),
+        );
+        if (upgraded == true) _loadData();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(1.5),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF9800), Color(0xFFFF5252), Color(0xFFBB86FC)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A0E2E),
+            borderRadius: BorderRadius.circular(19),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF9800).withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.lock_rounded, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Trial Mode Active',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Generation locked · Tap to unlock Pro',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.white54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'UPGRADE',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDesktopDashboardHome(BuildContext context) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_isPro && _proExpiresAt != null && _proExpiresAt!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: _buildProModeBannerContent(),
+            ),
+          if (_trialLocked)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: _buildTrialModeBannerContent(),
+            ),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2381,72 +2584,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: Container(
-                      padding: const EdgeInsets.all(1.5),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF34A853), Color(0xFF00C853)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1A0E2E),
-                          borderRadius: BorderRadius.circular(19),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF34A853), Color(0xFF00C853)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF34A853).withValues(alpha: 0.4),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(Icons.verified_rounded, color: Colors.white, size: 22),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'PRO Monthly Active',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Valid until ${_formatExpDate(_proExpiresAt!)}',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 11,
-                                      color: Colors.white54,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    child: _buildProModeBannerContent(),
                   ),
                 ),
 
@@ -2455,101 +2593,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: GestureDetector(
-                      onTap: () async {
-                        final upgraded = await Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const UpgradeScreen()),
-                        );
-                        if (upgraded == true) _loadData();
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(1.5),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFF9800), Color(0xFFFF5252), Color(0xFFBB86FC)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A0E2E),
-                            borderRadius: BorderRadius.circular(19),
-                          ),
-                          child: Row(
-                            children: [
-                              // Icon with glow
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFFFF9800).withValues(alpha: 0.4),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(Icons.lock_rounded, color: Colors.white, size: 22),
-                              ),
-                              const SizedBox(width: 14),
-                              // Text
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Trial Mode Active',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Generation locked · Tap to unlock Pro',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 11,
-                                        color: Colors.white54,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              // Upgrade chip
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFFF9800), Color(0xFFFF5252)],
-                                  ),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  'UPGRADE',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                    letterSpacing: 0.8,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+                    child: _buildTrialModeBannerContent(),
                   ),
                 ),
 

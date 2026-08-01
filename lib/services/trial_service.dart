@@ -199,7 +199,6 @@ class TrialService {
     if (cloudData.isNotEmpty) {
       final prefs = await SharedPreferences.getInstance();
       final cloudPro = cloudData['pro'] == true;
-      final localPro = prefs.getBool('$_proPrefix$userEmail') ?? false;
 
       if (cloudPro) {
         await prefs.setBool('$_proPrefix$userEmail', true);
@@ -213,13 +212,12 @@ class TrialService {
           await service.setRouterProFlag(userEmail);
         }
       } else {
-        // Cloud says NOT PRO. Revoke local.
-        if (localPro) {
-          await prefs.remove('$_proPrefix$userEmail');
-          await prefs.remove('$_proExpiresPrefix$userEmail');
-          if (service != null && service.isConnected) {
-             await service.removeRouterProFlag(userEmail);
-          }
+        // Cloud says NOT PRO. Revoke local AND router (regardless of local state),
+        // so a stale router flag can't re-grant PRO on the next isPro() call.
+        await prefs.remove('$_proPrefix$userEmail');
+        await prefs.remove('$_proExpiresPrefix$userEmail');
+        if (service != null && service.isConnected) {
+          await service.removeRouterProFlag(userEmail);
         }
       }
 
@@ -259,32 +257,54 @@ class TrialService {
   }
 
   /// Returns true if the user has already used their 1-time free trial voucher generation.
+  ///
+  /// Cloud is the authoritative source. If cloud says trial is NOT used (e.g.
+  /// an admin reset it), we trust that over any stale local/router flags.
   static Future<bool> hasGenerated([String? email, MikrotikService? service]) async {
     final userEmail = getEmail(email);
     if (userEmail.isEmpty) return false;
 
     final prefs = await SharedPreferences.getInstance();
-    final localUsed = prefs.getBool('$_trialPrefix$userEmail') ?? false;
-    if (localUsed) return true;
 
-    // 2. Check MikroTik Router
-    if (service != null && service.isConnected) {
-      final routerUsed = await service.checkRouterTrialFlag(userEmail);
-      if (routerUsed) {
-        await prefs.setBool('$_trialPrefix$userEmail', true);
-        await CloudSyncService.saveUserState(userEmail, trialUsed: true);
-        return true;
-      }
+    // 1. Check Cloud Database FIRST — cloud is authoritative (admin can reset from here).
+    bool? cloudTrialUsed;
+    try {
+      final cloudData = await CloudSyncService.getUserState(userEmail);
+      cloudTrialUsed = cloudData['trial_used'] == true;
+    } catch (_) {
+      // Network unreachable — fall back to local/router below.
     }
 
-    // 3. Check Cloud Database
-    final cloudData = await CloudSyncService.getUserState(userEmail);
-    if (cloudData['trial_used'] == true) {
+    if (cloudTrialUsed == false) {
+      // Admin has cleared the trial in the cloud. Ensure local and router are
+      // also cleared so a stale flag can't re-lock the trial later.
+      await prefs.remove('$_trialPrefix$userEmail');
+      if (service != null && service.isConnected) {
+        await service.removeRouterTrialFlag(userEmail);
+      }
+      return false;
+    }
+
+    if (cloudTrialUsed == true) {
+      // Cloud confirms trial was used — propagate down to local & router.
       await prefs.setBool('$_trialPrefix$userEmail', true);
       if (service != null && service.isConnected) {
         await service.setRouterTrialFlag(userEmail);
       }
       return true;
+    }
+
+    // Cloud unreachable — fall back to local SharedPreferences.
+    final localUsed = prefs.getBool('$_trialPrefix$userEmail') ?? false;
+    if (localUsed) return true;
+
+    // Last resort: check MikroTik Router when offline from cloud.
+    if (service != null && service.isConnected) {
+      final routerUsed = await service.checkRouterTrialFlag(userEmail);
+      if (routerUsed) {
+        await prefs.setBool('$_trialPrefix$userEmail', true);
+        return true;
+      }
     }
 
     return false;

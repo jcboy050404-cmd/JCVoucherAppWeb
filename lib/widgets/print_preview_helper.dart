@@ -112,6 +112,24 @@ void showVoucherPrintPreview(
                                 hint: 'ENJOY @ JOEMIA CAFE',
                                 onChanged: (_) => updateStates(() {}),
                               ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Tickets per Page: $targetTicketsPerPage',
+                                style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
+                              ),
+                              Slider(
+                                value: targetTicketsPerPage.toDouble(),
+                                min: 10,
+                                max: 100,
+                                divisions: 90,
+                                activeColor: const Color(0xFF00BFFF),
+                                inactiveColor: Colors.white24,
+                                onChanged: (val) {
+                                  updateStates(() {
+                                    targetTicketsPerPage = val.toInt();
+                                  });
+                                },
+                              ),
                               if (selectedTemplate == VoucherTemplate.premium) ...[
                                 const SizedBox(height: 16),
                                 Row(
@@ -153,24 +171,7 @@ void showVoucherPrintPreview(
                                     ],
                                   ],
                                 ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Tickets per Page: $targetTicketsPerPage',
-                                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
-                                ),
-                                Slider(
-                                  value: targetTicketsPerPage.toDouble(),
-                                  min: 10,
-                                  max: 100,
-                                  divisions: 90,
-                                  activeColor: const Color(0xFF00BFFF),
-                                  inactiveColor: Colors.white24,
-                                  onChanged: (val) {
-                                    updateStates(() {
-                                      targetTicketsPerPage = val.toInt();
-                                    });
-                                  },
-                                ),
+
                                 const SizedBox(height: 16),
                                 Text(
                                   'Accent Color',
@@ -383,8 +384,7 @@ void showVoucherPrintPreview(
                               color: Colors.white70,
                             ),
                           ),
-                          if (selectedTemplate != VoucherTemplate.standard)
-                            GestureDetector(
+                          GestureDetector(
                               onTap: openCustomizerModal,
                               child: Text(
                                 '✏️ Customize Fields',

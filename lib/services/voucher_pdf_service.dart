@@ -133,6 +133,7 @@ class VoucherPdfService {
         loginUrl: loginUrl,
         footerNote: footerNote,
         customFormat: customFormat,
+        targetTicketsPerPage: targetTicketsPerPage,
       );
     }
 
@@ -145,6 +146,7 @@ class VoucherPdfService {
         paperSize,
         hotspotName: hotspotName,
         customFormat: customFormat,
+        targetTicketsPerPage: targetTicketsPerPage,
       );
     }
 
@@ -157,6 +159,7 @@ class VoucherPdfService {
         paperSize,
         hotspotName: hotspotName,
         customFormat: customFormat,
+        targetTicketsPerPage: targetTicketsPerPage,
       );
     }
 
@@ -169,6 +172,7 @@ class VoucherPdfService {
         paperSize,
         hotspotName: hotspotName,
         customFormat: customFormat,
+        targetTicketsPerPage: targetTicketsPerPage,
       );
     }
 
@@ -259,9 +263,9 @@ class VoucherPdfService {
       final double cellW = (usableWidth - (cols - 1) * colSpacing) / cols;
 
       final double gridUsableH = usableHeight - headerHeight - headerSpacing;
-      final int rows =
-          ((gridUsableH + rowSpacing) / (cellH + rowSpacing)).floor().clamp(1, 30);
-      final int perPage = cols * rows;
+      final int perPage = targetTicketsPerPage > 0 ? targetTicketsPerPage : 21;
+      final int rows = (perPage / cols).ceil().clamp(1, 100);
+      final double cellH = (gridUsableH - (rows - 1) * rowSpacing) / rows;
       final int totalPages = (vouchers.length / perPage).ceil().clamp(1, 9999);
 
       for (int p = 0; p < totalPages; p++) {
@@ -321,6 +325,7 @@ class VoucherPdfService {
                               cellH: cellH,
                               baseFont: baseFont,
                               boldFont: boldFont,
+                              hotspotName: hotspotName,
                             )
                           else
                             pw.SizedBox(width: cellW, height: cellH),
@@ -532,6 +537,7 @@ class VoucherPdfService {
     required double cellH,
     required pw.Font baseFont,
     required pw.Font boldFont,
+    required String hotspotName,
     int? overallIndex,
   }) {
     if (idx >= slice.length) {
@@ -595,7 +601,7 @@ class VoucherPdfService {
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
                         pw.Text(
-                          'Wi-Fi VOUCHER',
+                          hotspotName.toUpperCase(),
                           style: pw.TextStyle(
                             font: boldFont,
                             fontSize: 6,
@@ -972,6 +978,7 @@ class VoucherPdfService {
     required String loginUrl,
     required String footerNote,
     PdfPageFormat? customFormat,
+    int targetTicketsPerPage = 21,
   }) async {
     final pdf = pw.Document();
     final isThermal = paperSize.isThermal;
@@ -1031,8 +1038,9 @@ class VoucherPdfService {
       final double cellW = (usableWidth - (cols - 1) * colSpacing) / cols;
 
       final double gridUsableH = usableHeight - headerHeight - headerSpacing;
-      final int rows = ((gridUsableH + rowSpacing) / (cellH + rowSpacing)).floor().clamp(1, 30);
-      final int perPage = cols * rows;
+      final int perPage = targetTicketsPerPage > 0 ? targetTicketsPerPage : 21;
+      final int rows = (perPage / cols).ceil().clamp(1, 100);
+      final double cellH = (gridUsableH - (rows - 1) * rowSpacing) / rows;
       final int totalPages = (vouchers.length / perPage).ceil().clamp(1, 9999);
 
       for (int p = 0; p < totalPages; p++) {
@@ -1227,6 +1235,7 @@ class VoucherPdfService {
     VoucherPaperSize paperSize, {
     required String hotspotName,
     PdfPageFormat? customFormat,
+    int targetTicketsPerPage = 21,
   }) async {
     final pdf = pw.Document();
     final isThermal = paperSize.isThermal;
@@ -1278,8 +1287,9 @@ class VoucherPdfService {
       final double cellW = (usableWidth - (cols - 1) * colSpacing) / cols;
 
       final double gridUsableH = usableHeight - headerHeight - headerSpacing;
-      final int rows = ((gridUsableH + rowSpacing) / (cellH + rowSpacing)).floor().clamp(1, 30);
-      final int perPage = cols * rows;
+      final int perPage = targetTicketsPerPage > 0 ? targetTicketsPerPage : 21;
+      final int rows = (perPage / cols).ceil().clamp(1, 100);
+      final double cellH = (gridUsableH - (rows - 1) * rowSpacing) / rows;
       final int totalPages = (vouchers.length / perPage).ceil().clamp(1, 9999);
 
       for (int p = 0; p < totalPages; p++) {
@@ -1467,6 +1477,7 @@ class VoucherPdfService {
     VoucherPaperSize paperSize, {
     required String hotspotName,
     PdfPageFormat? customFormat,
+    int targetTicketsPerPage = 21,
   }) async {
     final pdf = pw.Document();
     final isThermal = paperSize.isThermal;
@@ -1518,8 +1529,9 @@ class VoucherPdfService {
       final double cellW = (usableWidth - (cols - 1) * colSpacing) / cols;
 
       final double gridUsableH = usableHeight - headerHeight - headerSpacing;
-      final int rows = ((gridUsableH + rowSpacing) / (cellH + rowSpacing)).floor().clamp(1, 30);
-      final int perPage = cols * rows;
+      final int perPage = targetTicketsPerPage > 0 ? targetTicketsPerPage : 21;
+      final int rows = (perPage / cols).ceil().clamp(1, 100);
+      final double cellH = (gridUsableH - (rows - 1) * rowSpacing) / rows;
       final int totalPages = (vouchers.length / perPage).ceil().clamp(1, 9999);
 
       for (int p = 0; p < totalPages; p++) {
@@ -1664,6 +1676,7 @@ class VoucherPdfService {
     VoucherPaperSize paperSize, {
     required String hotspotName,
     PdfPageFormat? customFormat,
+    int targetTicketsPerPage = 21,
   }) async {
     final pdf = pw.Document();
     final isThermal = paperSize.isThermal;
@@ -1715,8 +1728,9 @@ class VoucherPdfService {
       final double cellW = (usableWidth - (cols - 1) * colSpacing) / cols;
 
       final double gridUsableH = usableHeight - headerHeight - headerSpacing;
-      final int rows = ((gridUsableH + rowSpacing) / (cellH + rowSpacing)).floor().clamp(1, 30);
-      final int perPage = cols * rows;
+      final int perPage = targetTicketsPerPage > 0 ? targetTicketsPerPage : 21;
+      final int rows = (perPage / cols).ceil().clamp(1, 100);
+      final double cellH = (gridUsableH - (rows - 1) * rowSpacing) / rows;
       final int totalPages = (vouchers.length / perPage).ceil().clamp(1, 9999);
 
       for (int p = 0; p < totalPages; p++) {

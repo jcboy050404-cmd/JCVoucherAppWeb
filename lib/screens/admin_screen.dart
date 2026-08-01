@@ -391,11 +391,11 @@ class _AdminScreenState extends State<AdminScreen> {
     if (mounted) setState(() => _isLoadingUsers = true);
     try {
       if (type == 'trial') {
-        await TrialService.resetTrial(email);
+        // Set to Free/Trial: clear both pro and trial_used so user gets a fresh trial.
         await CloudSyncService.saveUserState(email, pro: false, proExpiresAt: '', trialUsed: false);
       } else if (type == 'trial_reset') {
-        await TrialService.resetTrial(email);
-        await CloudSyncService.saveUserState(email, pro: false, proExpiresAt: '');
+        // Reset trial only: keep pro status unchanged, clear trial_used flag.
+        await CloudSyncService.saveUserState(email, trialUsed: false);
       } else if (type == 'lifetime') {
         await CloudSyncService.saveUserState(email, pro: true, proExpiresAt: '');
       } else if (type == 'monthly') {
@@ -403,8 +403,9 @@ class _AdminScreenState extends State<AdminScreen> {
         final expiry = now.add(const Duration(days: 30));
         await CloudSyncService.saveUserState(email, pro: true, proExpiresAt: expiry.toIso8601String());
       }
-
-      await TrialService.syncWithCloud(email);
+      // Note: No syncWithCloud here — the admin device has no MikroTik service, so
+      // the call would be a no-op. The cloud-first hasGenerated() logic will clean up
+      // any stale local/router flags the next time the user's app checks trial status.
 
       if (mounted) {
         TopToast.show(context, '✅ Updated account to ${type.toUpperCase()}', backgroundColor: const Color(0xFF34A853));

@@ -68,13 +68,28 @@ class AuthService {
   /// Priority: secure storage → SharedPreferences (migration) → null
   Future<GoogleUserModel?> init() async {
     try {
-      // 1. Try secure storage first (survives uninstall)
+      // 1. Primary: Try SharedPreferences first (more reliable on Windows desktop)
+      final prefs = await SharedPreferences.getInstance();
+      final savedUserJson = prefs.getString(_prefsUserKey);
+      
+      if (savedUserJson != null && savedUserJson.isNotEmpty) {
+        final user = GoogleUserModel.fromJson(savedUserJson);
+        currentUserNotifier.value = user;
+        debugPrint('AuthService: Session restored from SharedPreferences [${user.email}]');
+        
+        // Background sync to secure storage just in case it was wiped
+        _writeToSecureStorage(user);
+        return user;
+      }
+
+      // 2. Fallback: Try secure storage (survives uninstall on Android/iOS)
       final email = await _secureStorage.read(key: _secureEmailKey);
       if (email != null && email.isNotEmpty) {
         final displayName =
             await _secureStorage.read(key: _secureDisplayKey) ??
                 email.split('@').first;
-        final photoUrl = await _secureStorage.read(key: _securePhotoKey);
+        final photoRaw = await _secureStorage.read(key: _securePhotoKey);
+        final photoUrl = (photoRaw != null && photoRaw.isNotEmpty) ? photoRaw : null;
         final id = await _secureStorage.read(key: _secureIdKey) ??
             'secure_user_${email.hashCode}';
 
@@ -85,21 +100,10 @@ class AuthService {
           photoUrl: photoUrl,
         );
         currentUserNotifier.value = user;
-        debugPrint('AuthService: Session restored from secure storage [$email]');
-        return user;
-      }
-
-      // 2. Fall back to SharedPreferences (and migrate to secure storage)
-      final prefs = await SharedPreferences.getInstance();
-      final savedUserJson = prefs.getString(_prefsUserKey);
-      if (savedUserJson != null && savedUserJson.isNotEmpty) {
-        final user = GoogleUserModel.fromJson(savedUserJson);
-
-        // Migrate to secure storage so next launch uses it
-        await _writeToSecureStorage(user);
-        currentUserNotifier.value = user;
-        debugPrint(
-            'AuthService: Session migrated prefs → secure storage [${user.email}]');
+        debugPrint('AuthService: Session recovered from secure storage [$email]');
+        
+        // Migrate back to SharedPreferences
+        prefs.setString(_prefsUserKey, user.toJson());
         return user;
       }
     } catch (e) {
@@ -328,11 +332,25 @@ class AuthService {
         photoUrl: user.photoUrl,
       );
       final prefs = await SharedPreferences.getInstance();
+      final emailKey = user.email.toLowerCase();
+
+      // Sync PRO status — set OR clear based on cloud truth.
       if (res['pro'] == true) {
-        await prefs.setBool('pro_unlocked_${user.email.toLowerCase()}', true);
+        await prefs.setBool('pro_unlocked_$emailKey', true);
+      } else {
+        // Cloud says NOT pro (or admin downgraded) — clear the stale local flag.
+        await prefs.remove('pro_unlocked_$emailKey');
+        await prefs.remove('pro_expires_$emailKey');
       }
+
+      // Sync Trial status — set OR clear based on cloud truth.
+      // If admin reset the trial (cloud = false), clear the stale local flag
+      // immediately on login so the user isn't stuck waiting for the dashboard.
       if (res['trial_used'] == true) {
-        await prefs.setBool('trial_generated_${user.email.toLowerCase()}', true);
+        await prefs.setBool('trial_generated_$emailKey', true);
+      } else {
+        // Admin has reset the trial in cloud — clear local flag now.
+        await prefs.remove('trial_generated_$emailKey');
       }
       if (res['is_new_account'] == true) {
         debugPrint('AuthService: Registered NEW account in Online Cloud DB!');
@@ -363,12 +381,15 @@ class AuthService {
 
   Future<void> _writeToSecureStorage(GoogleUserModel user) async {
     try {
+      // Always clear all keys first so stale values from a previous account
+      // never bleed into the newly signed-in session (e.g. old photoUrl persisting
+      // when the new account has no photo — the "wrong account on dashboard" bug).
+      await _clearSecureStorage();
       await _secureStorage.write(key: _secureEmailKey, value: user.email);
       await _secureStorage.write(key: _secureDisplayKey, value: user.displayName);
       await _secureStorage.write(key: _secureIdKey, value: user.id);
-      if (user.photoUrl != null) {
-        await _secureStorage.write(key: _securePhotoKey, value: user.photoUrl!);
-      }
+      // Always write photoUrl (even empty string) so the old value never leaks.
+      await _secureStorage.write(key: _securePhotoKey, value: user.photoUrl ?? '');
     } catch (e) {
       debugPrint('AuthService: Secure storage write failed: $e');
     }
