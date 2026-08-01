@@ -75,8 +75,6 @@ class _MikrotikFileExplorerScreenState extends State<MikrotikFileExplorerScreen>
     return _binaryExtensions.any((ext) => lower.endsWith(ext));
   }
 
-  static bool _isUploadable(String filename) =>
-      _isTextFile(filename) || _isBinaryFile(filename);
 
   String get _currentDirString {
     if (_currentPath.length == 1) return '';
@@ -148,11 +146,11 @@ class _MikrotikFileExplorerScreenState extends State<MikrotikFileExplorerScreen>
       final ctx = context;
       try {
         await widget.service.deleteFile(file.id);
-        if (!mounted) return;
+        if (!ctx.mounted) return;
         TopToast.show(ctx, 'File deleted successfully', backgroundColor: const Color(0xFF00E676));
         await _loadFiles();
       } catch (e) {
-        if (!mounted) return;
+        if (!ctx.mounted) return;
         TopToast.show(ctx, 'Error deleting file: $e', backgroundColor: const Color(0xFFFF5252));
         setState(() => _isLoading = false);
       }
@@ -314,7 +312,7 @@ class _MikrotikFileExplorerScreenState extends State<MikrotikFileExplorerScreen>
     }
 
     if (toUpload.isEmpty) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       TopToast.show(context, 'No uploadable files found in ZIP.',
           backgroundColor: const Color(0xFFFF9800));
       return;
@@ -323,6 +321,7 @@ class _MikrotikFileExplorerScreenState extends State<MikrotikFileExplorerScreen>
     // 5. Confirm dialog
     final existingCount =
         _allFiles.where((f) => f.name.startsWith(_currentDirString)).length;
+    if (!context.mounted) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -395,7 +394,7 @@ class _MikrotikFileExplorerScreenState extends State<MikrotikFileExplorerScreen>
                   fontSize: 15)),
           content: ValueListenableBuilder<(int, int, String)>(
             valueListenable: progress,
-            builder: (_, val, __) {
+            builder: (_, val, _) {
               final done = val.$1;
               final total = val.$2;
               final label = val.$3;

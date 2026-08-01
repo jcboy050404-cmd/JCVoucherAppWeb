@@ -340,7 +340,7 @@ class _ProfileListScreenState extends State<ProfileListScreen> {
     :if ([:find \$valStr "d"] >= 0) do={ :set interval ([:pick \$valStr 0 [:find \$valStr "d"]] . "d"); }
     :if ([:find \$valStr "h"] >= 0) do={ :set interval ([:pick \$valStr 0 [:find \$valStr "h"]] . "h"); }
     :local schedName ("exp_" . \$user);
-    :local onEvent ("/ip hotspot user set [find name=\\"" . \$user . "\\"] comment=([/ip hotspot user get [find name=\\"" . \$user . "\\"] comment] . \" expired\"); /ip hotspot user disable [find name=\\"" . \$user . "\\"]; /ip hotspot active remove [find user=\\"" . \$user . "\\"]; /system scheduler remove [find name=\\"" . \$schedName . "\\"];");
+    :local onEvent ("/ip hotspot user set [find name=\\"" . \$user . "\\"] comment=([/ip hotspot user get [find name=\\"" . \$user . "\\"] comment] . " expired"); /ip hotspot user disable [find name=\\"" . \$user . "\\"]; /ip hotspot active remove [find user=\\"" . \$user . "\\"]; /system scheduler remove [find name=\\"" . \$schedName . "\\"];");
     /system scheduler add name=\$schedName interval=\$interval start-date=[/system clock get date] start-time=[/system clock get time] on-event=\$onEvent;
     :delay 1s;
     :local nextRun [/system scheduler get [find name=\$schedName] next-run];

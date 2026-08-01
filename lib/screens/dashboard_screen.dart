@@ -56,8 +56,8 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Timer? _trafficTimer;
   String? _monitoredInterface;
-  List<FlSpot> _rxSpots = [];
-  List<FlSpot> _txSpots = [];
+  final List<FlSpot> _rxSpots = [];
+  final List<FlSpot> _txSpots = [];
   double _timeCounter = 0;
   double _maxTrafficY = 10.0;
   Map<String, String>? _systemResource;
@@ -1192,7 +1192,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                         if (mounted) setStateDialog(() { ddnsEnabled = false; dnsName = ''; });
                                       }
                                     } catch (e) {
-                                      if (!mounted) return;
+                                      if (!context.mounted) return;
                                       TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
                                     } finally {
                                       if (mounted) setStateDialog(() => isSavingDDNS = false);
@@ -1255,7 +1255,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                       await widget.service.setWebFigEnabled(val);
                                       if (mounted) setStateDialog(() => webFigEnabled = val);
                                     } catch (e) {
-                                      if (!mounted) return;
+                                      if (!context.mounted) return;
                                       TopToast.show(context, 'Error: $e', backgroundColor: const Color(0xFFFF5252));
                                     } finally {
                                       if (mounted) setStateDialog(() => isSavingWebFig = false);
@@ -1781,44 +1781,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildResourceBar(IconData icon, String label, String value, double percentage, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Icon(icon, color: Colors.white54, size: 14),
-            const SizedBox(width: 4),
-            Text(label, style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12)),
-            const SizedBox(width: 8),
-            Text(value, style: GoogleFonts.poppins(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Container(
-          width: 120,
-          height: 6,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(3),
-          ),
-          alignment: Alignment.centerLeft,
-          child: Container(
-            width: 120 * (percentage / 100).clamp(0.0, 1.0),
-            height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(3),
-              boxShadow: [
-                BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 4, offset: const Offset(0, 2)),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildSalesMonitoringCard() {
     return Column(
@@ -1982,7 +1945,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 Expanded(flex: 2, child: Text(u.formattedDataUsage, style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12))),
               ],
             ),
-          )).toList(),
+          )),
       ],
     );
   }

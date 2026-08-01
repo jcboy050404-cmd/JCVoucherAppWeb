@@ -219,7 +219,7 @@ class _PppoeScreenState extends State<PppoeScreen>
 
 
   /// Normalizes a PH mobile number to the international form WhatsApp's
-  /// wa.me/<number> requires: digits only, no leading '+', no leading '0'.
+  /// wa.me/number requires: digits only, no leading '+', no leading '0'.
   /// `09XXXXXXXXX` → `639XXXXXXXXX`; `+639XXXXXXXXX` → `639XXXXXXXXX`.
   /// Returns null if [raw] is null/empty/not a valid PH mobile.
   String? _normalizePhoneForWa(String? raw) {
@@ -362,7 +362,7 @@ class _PppoeScreenState extends State<PppoeScreen>
     if (granted) return true;
 
     final permanentlyDenied = await AutoSmsService.isPermanentlyDenied();
-    if (!mounted) return false;
+    if (!modalCtx.mounted) return false;
 
     await showDialog(
       context: modalCtx,
