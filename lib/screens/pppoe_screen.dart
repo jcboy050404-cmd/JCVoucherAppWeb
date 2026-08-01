@@ -387,19 +387,15 @@ class _PppoeScreenState extends State<PppoeScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(ctx, false),
             child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.white54)),
           ),
           ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              if (permanentlyDenied) {
-                openAppSettings();
-              } else {
-                Permission.sms.request();
-              }
-            },
-            icon: const Icon(Icons.settings_rounded, size: 16),
+            onPressed: () => Navigator.pop(ctx, !permanentlyDenied),
+            icon: Icon(
+              permanentlyDenied ? Icons.settings_rounded : Icons.check_circle_outline_rounded,
+              size: 16,
+            ),
             label: Text(permanentlyDenied ? 'Open Settings' : 'Grant',
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
@@ -411,8 +407,18 @@ class _PppoeScreenState extends State<PppoeScreen>
         ],
       ),
     );
-    return false;
+
+    if (permanentlyDenied) {
+      // Must redirect to Settings — nothing more we can do programmatically.
+      await openAppSettings();
+      return false;
+    }
+
+    // User tapped "Grant" → show the system permission dialog and wait for the result.
+    final result = await Permission.sms.request();
+    return result.isGranted;
   }
+
 
   Future<void> _showAutoSmsSettingsModal() async {
     bool enabled = await AutoSmsService.isEnabled();
