@@ -148,6 +148,7 @@ class CloudSyncService {
             'pro': data['pro'] == true,
             'trial_used': data['trial_used'] == true,
             'pro_expires_at': data['pro_expires_at'],
+            'custom_max_routers': data['custom_max_routers'],
           };
         }
       }
@@ -164,6 +165,7 @@ class CloudSyncService {
     bool? pro,
     bool? trialUsed,
     String? proExpiresAt,
+    int? customMaxRouters,
   }) async {
     if (email.isEmpty || email == 'default_user') return;
 
@@ -177,6 +179,13 @@ class CloudSyncService {
     if (pro != null) payload['pro'] = pro;
     if (trialUsed != null) payload['trial_used'] = trialUsed;
     if (proExpiresAt != null) payload['pro_expires_at'] = proExpiresAt;
+    if (customMaxRouters != null) {
+      if (customMaxRouters == -1) {
+        payload['custom_max_routers'] = null; // deletes the key
+      } else {
+        payload['custom_max_routers'] = customMaxRouters;
+      }
+    }
 
     try {
       await http
@@ -216,9 +225,60 @@ class CloudSyncService {
   /// Returns:
   ///   'allowed'   — router was already registered (no change needed).
   ///   'registered'— router was newly registered (slot consumed).
-  ///   'denied'    — all 3 slots are taken by other routers.
+  ///   'denied'    — all configured slots are taken by other routers.
   ///   'error'     — network/cloud failure.
-  static const int kMaxRoutersPerAccount = 3;
+  //
+  // The limit is now admin-editable via cloud global settings (key
+  // 'max_routers_per_account'). This constant is only the FALLBACK used when no
+  // cloud value is set yet (keeps backward compatibility so existing accounts
+  // don't suddenly get 100 slots on the next app update). The admin raises it
+  // (e.g. to 100) from the Admin → Global App Settings screen.
+  static const int kDefaultMaxRoutersPerAccount = 3;
+
+  /// Cache of the effective limit so registerRouter doesn't fetch settings on
+  /// every router connect (it's also only called once per session, verdict
+  /// cached upstream in TrialService). null = not loaded yet.
+  static int? _maxRoutersCache;
+
+  /// Returns the admin-configured max MikroTik devices per PRO account.
+  /// Reads cloud global settings once, then serves from cache. Falls back to
+  /// [kDefaultMaxRoutersPerAccount] on any error / unset value.
+  static Future<int> getMaxRoutersPerAccount() async {
+    final cached = _maxRoutersCache;
+    if (cached != null) return cached;
+    try {
+      final settings = await getGlobalSettings();
+      final v = settings['max_routers_per_account'];
+      final parsed = v is int ? v : int.tryParse(v?.toString() ?? '');
+      final limit = (parsed == null || parsed < 1) ? kDefaultMaxRoutersPerAccount : parsed;
+      _maxRoutersCache = limit;
+      return limit;
+    } catch (_) {
+      return kDefaultMaxRoutersPerAccount;
+    }
+  }
+
+  /// Lets the Admin screen refresh the cache immediately after editing the
+  /// limit so the next login uses the new value without a restart.
+  static void setMaxRoutersCache(int v) {
+    _maxRoutersCache = v < 1 ? kDefaultMaxRoutersPerAccount : v;
+  }
+
+  /// Gets the effective max routers for [email]. Checks user's custom limit
+  /// first, then falls back to the global limit.
+  static Future<int> getMaxRoutersForEmail(String email) async {
+    try {
+      final userState = await getUserState(email);
+      final customRaw = userState['custom_max_routers'];
+      if (customRaw != null) {
+        final parsed = customRaw is int ? customRaw : int.tryParse(customRaw.toString());
+        if (parsed != null && parsed >= 1) return parsed;
+      }
+    } catch (e) {
+      debugPrint('CloudSyncService: Failed to parse custom limit ($e)');
+    }
+    return await getMaxRoutersPerAccount();
+  }
 
   static Future<String> registerRouter(
     String email,
@@ -239,9 +299,10 @@ class CloudSyncService {
         return 'allowed';
       }
 
-      // 3. Slots full → deny
-      if (existing.length >= kMaxRoutersPerAccount) {
-        debugPrint('CloudSyncService: Device limit reached for $email (${existing.length}/$kMaxRoutersPerAccount)');
+      // 3. Slots full → deny. Check specific custom limit, then global limit.
+      final limit = await getMaxRoutersForEmail(email);
+      if (existing.length >= limit) {
+        debugPrint('CloudSyncService: Device limit reached for $email (${existing.length}/$limit)');
         return 'denied';
       }
 

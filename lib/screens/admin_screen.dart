@@ -41,6 +41,9 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _remoteConfigUnlocked = false;
   bool _fileManagerUnlocked = false;
   bool _isSavingGlobal = false;
+  // Admin-editable per-account MikroTik device limit (cloud global setting).
+  int _maxRouters = CloudSyncService.kDefaultMaxRoutersPerAccount;
+  final _maxRoutersCtrl = TextEditingController();
 
   // Force Update config — values currently published to the backend.
   String _forceUpdateLatest = '';
@@ -53,11 +56,20 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<void> _loadGlobalSettings() async {
     final settings = await CloudSyncService.getGlobalSettings();
+    // Resolve the admin-configured device limit (fallback to default if unset).
+    final rawLimit = settings['max_routers_per_account'];
+    final parsedLimit = rawLimit is int ? rawLimit : int.tryParse(rawLimit?.toString() ?? '');
+    final limit = (parsedLimit == null || parsedLimit < 1)
+        ? CloudSyncService.kDefaultMaxRoutersPerAccount
+        : parsedLimit;
+    CloudSyncService.setMaxRoutersCache(limit);
     if (mounted) {
       setState(() {
         _pppoeUnlocked = settings['pppoe_unlocked'] == true;
         _remoteConfigUnlocked = settings['remote_config_unlocked'] == true;
         _fileManagerUnlocked = settings['file_manager_unlocked'] == true;
+        _maxRouters = limit;
+        _maxRoutersCtrl.text = '$limit';
       });
     }
   }
@@ -129,6 +141,30 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  /// Saves the admin-configured per-account MikroTik device limit to the cloud
+  /// and refreshes the in-process cache so the next PRO login uses it.
+  Future<void> _saveMaxRouters() async {
+    final parsed = int.tryParse(_maxRoutersCtrl.text.trim());
+    if (parsed == null || parsed < 1 || parsed > 999) {
+      TopToast.show(context, 'Enter a number between 1 and 999', backgroundColor: const Color(0xFFFF5252));
+      return;
+    }
+    setState(() => _isSavingGlobal = true);
+    final success = await CloudSyncService.updateGlobalSettings({'max_routers_per_account': parsed});
+    if (mounted) {
+      setState(() => _isSavingGlobal = false);
+      if (success) {
+        setState(() => _maxRouters = parsed);
+        CloudSyncService.setMaxRoutersCache(parsed);
+        _maxRoutersCtrl.text = '$parsed';
+        TopToast.show(context, '✅ Device limit set to $parsed per account', backgroundColor: const Color(0xFF34A853));
+      } else {
+        TopToast.show(context, '❌ Failed to save device limit', backgroundColor: const Color(0xFFFF5252));
+        _maxRoutersCtrl.text = '$_maxRouters'; // revert field
+      }
+    }
+  }
+
   Future<void> _loadAllUsers() async {
     if (mounted) {
       setState(() {
@@ -164,6 +200,7 @@ class _AdminScreenState extends State<AdminScreen> {
     _qrUrlCtrl.dispose();
     _proPriceCtrl.dispose();
     _monthlyPriceCtrl.dispose();
+    _maxRoutersCtrl.dispose();
     super.dispose();
   }
 
@@ -1080,6 +1117,68 @@ class _AdminScreenState extends State<AdminScreen> {
                     value: _fileManagerUnlocked,
                     onChanged: _toggleFileManager,
                     activeThumbColor: const Color(0xFFBB86FC),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Max MikroTik Devices per Account', style: GoogleFonts.poppins(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                      Text('Default 3 · current: $_maxRouters', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                if (_isSavingGlobal)
+                  const Padding(
+                    padding: EdgeInsets.all(12.0),
+                    child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFBB86FC))),
+                  )
+                else
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 60,
+                        child: TextField(
+                          controller: _maxRoutersCtrl,
+                          keyboardType: TextInputType.number,
+                          style: GoogleFonts.poppins(color: Colors.white, fontSize: 13),
+                          textAlign: TextAlign.center,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            fillColor: Colors.white.withValues(alpha: 0.05),
+                            filled: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: _saveMaxRouters,
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFFBB86FC).withValues(alpha: 0.2),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          minimumSize: const Size(0, 36),
+                        ),
+                        child: Text('Save', style: GoogleFonts.poppins(color: const Color(0xFFBB86FC), fontSize: 12)),
+                      ),
+                    ],
                   ),
               ],
             ),
@@ -2098,6 +2197,10 @@ class _ManageDevicesDialog extends StatefulWidget {
 class _ManageDevicesDialogState extends State<_ManageDevicesDialog> {
   bool _loading = true;
   Map<String, dynamic> _routers = {};
+  int _maxLimit = CloudSyncService.kDefaultMaxRoutersPerAccount;
+  int? _customLimit;
+  final _customLimitCtrl = TextEditingController();
+  bool _isSavingCustomLimit = false;
 
   @override
   void initState() {
@@ -2105,9 +2208,60 @@ class _ManageDevicesDialogState extends State<_ManageDevicesDialog> {
     _loadRouters();
   }
 
+  @override
+  void dispose() {
+    _customLimitCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadRouters() async {
+    // Single fetch — parse custom limit directly from userState, then compute
+    // the effective limit locally (mirrors getMaxRoutersForEmail logic) to
+    // avoid a second round-trip to Firebase.
+    final userState = await CloudSyncService.getUserState(widget.email);
+    final customRaw = userState['custom_max_routers'];
+    int? customLimit;
+    if (customRaw != null) {
+      final parsed = customRaw is int ? customRaw : int.tryParse(customRaw.toString());
+      if (parsed != null && parsed >= 1) customLimit = parsed;
+    }
+
+    // Effective limit: custom if set, otherwise global.
+    final int effectiveLimit = customLimit ?? await CloudSyncService.getMaxRoutersPerAccount();
+
     final data = await CloudSyncService.getRegisteredRouters(widget.email);
-    if (mounted) setState(() { _routers = data; _loading = false; });
+    if (mounted) {
+      setState(() {
+        _routers = data;
+        _maxLimit = effectiveLimit;
+        _customLimit = customLimit;
+        _customLimitCtrl.text = customLimit != null ? '$customLimit' : '';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _saveCustomLimit() async {
+    final text = _customLimitCtrl.text.trim();
+    int? parsed;
+    if (text.isNotEmpty) {
+      parsed = int.tryParse(text);
+      if (parsed == null || parsed < 1 || parsed > 999) {
+        TopToast.show(context, 'Enter a number between 1 and 999 (or leave empty)', backgroundColor: const Color(0xFFFF5252));
+        return;
+      }
+    }
+
+    setState(() => _isSavingCustomLimit = true);
+    await CloudSyncService.saveUserState(
+      widget.email,
+      customMaxRouters: parsed ?? -1,
+    );
+    if (mounted) {
+      TopToast.show(context, '✅ Custom limit saved', backgroundColor: const Color(0xFF34A853));
+      await _loadRouters();
+      setState(() => _isSavingCustomLimit = false);
+    }
   }
 
   Future<void> _removeRouter(String routerIdHash) async {
@@ -2119,7 +2273,7 @@ class _ManageDevicesDialogState extends State<_ManageDevicesDialog> {
   @override
   Widget build(BuildContext context) {
     final used = _routers.length;
-    const max = CloudSyncService.kMaxRoutersPerAccount;
+    final max = _maxLimit;
 
     return AlertDialog(
       backgroundColor: const Color(0xFF1A1A2E),
@@ -2159,6 +2313,69 @@ class _ManageDevicesDialogState extends State<_ManageDevicesDialog> {
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Custom Limit
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Custom Device Limit', style: GoogleFonts.poppins(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                              Text('Leave empty to use global default', style: GoogleFonts.poppins(color: Colors.white54, fontSize: 10)),
+                            ],
+                          ),
+                        ),
+                        if (_isSavingCustomLimit)
+                          const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00BFFF))),
+                          )
+                        else
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 50,
+                                child: TextField(
+                                  controller: _customLimitCtrl,
+                                  keyboardType: TextInputType.number,
+                                  style: GoogleFonts.poppins(color: Colors.white, fontSize: 13),
+                                  textAlign: TextAlign.center,
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    fillColor: Colors.white.withValues(alpha: 0.1),
+                                    filled: true,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                onPressed: _saveCustomLimit,
+                                style: TextButton.styleFrom(
+                                  backgroundColor: const Color(0xFF00BFFF).withValues(alpha: 0.2),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  minimumSize: const Size(0, 32),
+                                ),
+                                child: Text('Save', style: GoogleFonts.poppins(color: const Color(0xFF00BFFF), fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   // Slot usage bar
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -2175,7 +2392,7 @@ class _ManageDevicesDialogState extends State<_ManageDevicesDialog> {
                             color: Color(0xFF00BFFF), size: 16),
                         const SizedBox(width: 8),
                         Text(
-                          'Device Slots Used: $used / $max',
+                          'Device Slots Used: $used / $max${_customLimit != null ? ' (Custom)' : ' (Global)'}',
                           style: GoogleFonts.poppins(
                               color: used >= max
                                   ? const Color(0xFFFF5252)
