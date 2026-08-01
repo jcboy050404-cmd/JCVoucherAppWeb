@@ -1629,13 +1629,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF00C853), Color(0xFF64DD17)],
+          colors: [Color(0xFFFFB300), Color(0xFFFFD54F)], // Gold theme
           begin: Alignment.topLeft, end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00C853).withValues(alpha: 0.3),
+            color: const Color(0xFFFFB300).withValues(alpha: 0.3), // Gold shadow
             blurRadius: 10, offset: const Offset(0, 4),
           ),
         ],
