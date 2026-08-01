@@ -1070,7 +1070,6 @@ class VoucherPdfService {
           ? customFormat
           : paperSize.pdfFormat;
       const int cols = 3; // Wider tickets for custom template
-      const double cellH = 100.0;
       const double headerHeight = 16.0;
       const double headerSpacing = 4.0;
       const double colSpacing = 6.0;
@@ -1319,7 +1318,6 @@ class VoucherPdfService {
     } else {
       var format = (paperSize == VoucherPaperSize.custom && customFormat != null) ? customFormat : paperSize.pdfFormat;
       const int cols = 3;
-      const double cellH = 90.0;
       const double headerHeight = 16.0;
       const double headerSpacing = 4.0;
       const double colSpacing = 8.0;
@@ -1561,7 +1559,6 @@ class VoucherPdfService {
     } else {
       var format = (paperSize == VoucherPaperSize.custom && customFormat != null) ? customFormat : paperSize.pdfFormat;
       const int cols = 3;
-      const double cellH = 80.0;
       const double headerHeight = 16.0;
       const double headerSpacing = 4.0;
       const double colSpacing = 8.0;
@@ -1760,7 +1757,6 @@ class VoucherPdfService {
     } else {
       var format = (paperSize == VoucherPaperSize.custom && customFormat != null) ? customFormat : paperSize.pdfFormat;
       const int cols = 3;
-      const double cellH = 110.0;
       const double headerHeight = 16.0;
       const double headerSpacing = 4.0;
       const double colSpacing = 6.0;
