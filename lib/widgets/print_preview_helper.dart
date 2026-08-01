@@ -112,24 +112,7 @@ void showVoucherPrintPreview(
                                 hint: 'ENJOY @ JOEMIA CAFE',
                                 onChanged: (_) => updateStates(() {}),
                               ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Tickets per Page: $targetTicketsPerPage',
-                                style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
-                              ),
-                              Slider(
-                                value: targetTicketsPerPage.toDouble(),
-                                min: 10,
-                                max: 100,
-                                divisions: 90,
-                                activeColor: const Color(0xFF00BFFF),
-                                inactiveColor: Colors.white24,
-                                onChanged: (val) {
-                                  updateStates(() {
-                                    targetTicketsPerPage = val.toInt();
-                                  });
-                                },
-                              ),
+
                               if (selectedTemplate == VoucherTemplate.premium) ...[
                                 const SizedBox(height: 16),
                                 Row(
@@ -448,6 +431,24 @@ void showVoucherPrintPreview(
                       ),
                       
                       // Customizer has been moved to a separate popup modal
+                      const SizedBox(height: 14),
+                      Text(
+                        'Tickets per Page: $targetTicketsPerPage',
+                        style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
+                      ),
+                      Slider(
+                        value: targetTicketsPerPage.toDouble(),
+                        min: 10,
+                        max: 100,
+                        divisions: 90,
+                        activeColor: const Color(0xFF00BFFF),
+                        inactiveColor: Colors.white24,
+                        onChanged: (val) {
+                          setPreviewState(() {
+                            targetTicketsPerPage = val.toInt();
+                          });
+                        },
+                      ),
                       const SizedBox(height: 14),
                     ],
                   ),

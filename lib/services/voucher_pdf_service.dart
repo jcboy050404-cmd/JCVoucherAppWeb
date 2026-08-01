@@ -239,6 +239,9 @@ class VoucherPdfService {
                     baseFont: baseFont,
                     boldFont: boldFont,
                     paperSize: paperSize,
+                    hotspotName: hotspotName,
+                    loginUrl: loginUrl,
+                    footerNote: footerNote,
                   ),
                   if (i < vouchers.length - 1) pw.SizedBox(height: spacing),
                 ],
@@ -250,8 +253,15 @@ class VoucherPdfService {
     } else {
       // ── STANDARD SHEET PAPER LAYOUT (A4, Letter, Long, Legal) ─────────────
       var format = (paperSize == VoucherPaperSize.custom && customFormat != null) ? customFormat : paperSize.pdfFormat;
-      const int cols = 4;
-      const double cellH = 68.0;
+      
+      final int perPage = targetTicketsPerPage > 0 ? targetTicketsPerPage : 21;
+      int cols = 4;
+      if (perPage <= 12) cols = 2;
+      else if (perPage <= 18) cols = 3;
+      else if (perPage <= 30) cols = 4;
+      else if (perPage <= 50) cols = 5;
+      else cols = 6;
+
       const double headerHeight = 16.0;
       const double headerSpacing = 4.0;
       const double colSpacing = 3.0;
@@ -263,7 +273,6 @@ class VoucherPdfService {
       final double cellW = (usableWidth - (cols - 1) * colSpacing) / cols;
 
       final double gridUsableH = usableHeight - headerHeight - headerSpacing;
-      final int perPage = targetTicketsPerPage > 0 ? targetTicketsPerPage : 21;
       final int rows = (perPage / cols).ceil().clamp(1, 100);
       final double cellH = (gridUsableH - (rows - 1) * rowSpacing) / rows;
       final int totalPages = (vouchers.length / perPage).ceil().clamp(1, 9999);
@@ -326,6 +335,8 @@ class VoucherPdfService {
                               baseFont: baseFont,
                               boldFont: boldFont,
                               hotspotName: hotspotName,
+                              loginUrl: loginUrl,
+                              footerNote: footerNote,
                             )
                           else
                             pw.SizedBox(width: cellW, height: cellH),
@@ -356,6 +367,9 @@ class VoucherPdfService {
     required pw.Font baseFont,
     required pw.Font boldFont,
     required VoucherPaperSize paperSize,
+    required String hotspotName,
+    required String loginUrl,
+    required String footerNote,
   }) {
     final bool is58 = paperSize == VoucherPaperSize.thermal58;
 
@@ -412,7 +426,7 @@ class VoucherPdfService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(
-                  'Wi-Fi VOUCHER',
+                  hotspotName.isNotEmpty ? hotspotName.toUpperCase() : 'Wi-Fi VOUCHER',
                   style: pw.TextStyle(
                     font: boldFont,
                     fontSize: titleFontSize,
@@ -488,6 +502,23 @@ class VoucherPdfService {
               valueSize: fieldValueSize - 0.5,
               baseFont: baseFont,
               boldFont: boldFont),
+              
+          if (loginUrl.isNotEmpty) ...[
+            pw.SizedBox(height: 3),
+            pw.Text(
+              'Portal: $loginUrl',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(font: baseFont, fontSize: fieldLabelSize - 1, color: PdfColors.black),
+            ),
+          ],
+          if (footerNote.isNotEmpty) ...[
+            pw.SizedBox(height: 1),
+            pw.Text(
+              footerNote,
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(font: boldFont, fontSize: fieldLabelSize, color: PdfColors.black),
+            ),
+          ],
         ],
       ),
     );
@@ -538,6 +569,8 @@ class VoucherPdfService {
     required pw.Font baseFont,
     required pw.Font boldFont,
     required String hotspotName,
+    required String loginUrl,
+    required String footerNote,
     int? overallIndex,
   }) {
     if (idx >= slice.length) {
@@ -650,6 +683,16 @@ class VoucherPdfService {
                           baseFont: baseFont, boldFont: boldFont),
                       _sheetRow('Generated:', genDate,
                           baseFont: baseFont, boldFont: boldFont),
+                      if (loginUrl.isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 1),
+                          child: pw.Text('Portal: $loginUrl', style: pw.TextStyle(font: baseFont, fontSize: 5.5)),
+                        ),
+                      if (footerNote.isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 1),
+                          child: pw.Text(footerNote, style: pw.TextStyle(font: boldFont, fontSize: 6.0)),
+                        ),
                     ],
                   ),
                 ),
